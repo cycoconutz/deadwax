@@ -11,6 +11,7 @@ import OrderDetail from './pages/OrderDetail'
 import Orders from './pages/Orders'
 import Register from './pages/Register'
 import Sell from './pages/Sell'
+import Seller from './pages/Seller'
 
 function Header() {
   const { user, isPending } = useAuth()
@@ -31,6 +32,9 @@ function Header() {
       <nav className="site-nav">
         <Link to="/">Browse</Link>
         <Link to="/sell">Sell</Link>
+        {user && (user.role === 'seller' || user.role === 'admin') && (
+          <Link to="/seller">Dashboard</Link>
+        )}
         {user && <Link to="/orders">Orders</Link>}
         <Link to="/cart" className="nav-cart">
           Cart
@@ -76,6 +80,7 @@ export default function App() {
           <Route path="/" element={<Browse />} />
           <Route path="/listings/:id" element={<ListingDetail />} />
           <Route path="/sell" element={<Sell />} />
+          <Route path="/seller" element={<Seller />} />
           <Route path="/cart" element={<Cart />} />
           <Route path="/checkout" element={<Checkout />} />
           <Route path="/orders" element={<Orders />} />

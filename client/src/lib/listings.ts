@@ -73,6 +73,7 @@ export function useCreateListing() {
       api<{ id: number }>('/listings', { method: 'POST', body: input }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: listingKeys.all })
+      queryClient.invalidateQueries({ queryKey: ['seller'] })
     },
   })
 }
@@ -84,6 +85,7 @@ export function useUpdateListing(id: number) {
       api<{ ok: true }>(`/listings/${id}`, { method: 'PATCH', body: input }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: listingKeys.all })
+      queryClient.invalidateQueries({ queryKey: ['seller'] })
     },
   })
 }
@@ -94,6 +96,7 @@ export function useDeleteListing() {
     mutationFn: (id: number) => api<void>(`/listings/${id}`, { method: 'DELETE' }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: listingKeys.all })
+      queryClient.invalidateQueries({ queryKey: ['seller'] })
     },
   })
 }

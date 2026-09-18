@@ -72,6 +72,7 @@ export default function OrderDetail() {
                   {item.quantity}× {item.artist} — {item.title}
                   <em className="order-seller"> via {item.sellerName}</em>
                 </span>
+                <span className={`mini-status mono status-${item.status}`}>{item.status}</span>
                 <span>{formatPrice(item.priceCents * item.quantity)}</span>
               </li>
             ))}

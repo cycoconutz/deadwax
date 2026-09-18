@@ -12,6 +12,7 @@ import cartRoutes from './routes/cart'
 import healthRoutes from './routes/health'
 import listingRoutes from './routes/listings'
 import orderRoutes from './routes/orders'
+import sellerRoutes from './routes/seller'
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -47,6 +48,7 @@ await app.register(authRoutes, { prefix: '/api' })
 await app.register(listingRoutes, { prefix: '/api' })
 await app.register(cartRoutes, { prefix: '/api' })
 await app.register(orderRoutes, { prefix: '/api' })
+await app.register(sellerRoutes, { prefix: '/api' })
 
 if (clientDist) {
   await app.register(fastifyStatic, { root: clientDist, index: ['index.html'] })

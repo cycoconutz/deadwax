@@ -239,6 +239,7 @@ export interface OrderItemPublic {
   quantity: number
   sellerId: number
   sellerName: string
+  status: OrderStatus
 }
 
 export interface OrderSummary {
@@ -269,4 +270,37 @@ export interface OrderDetail extends OrderSummary {
   shippingPostal: string
   shippingCountry: string
   payment: OrderPayment | null
+}
+
+/* ------------------------------ seller --------------------------------- */
+
+export interface SellerOrderItem {
+  id: number
+  listingId: number | null
+  title: string
+  artist: string
+  priceCents: number
+  quantity: number
+  status: OrderStatus
+}
+
+export interface SellerOrder {
+  id: number
+  orderStatus: OrderStatus
+  buyerName: string
+  createdAt: string
+  shippingName: string
+  shippingCity: string
+  shippingRegion: string
+  shippingCountry: string
+  sellerTotalCents: number
+  items: SellerOrderItem[]
+}
+
+export interface SellerSummary {
+  activeListings: number
+  archivedListings: number
+  unitsSold: number
+  ordersToShip: number
+  grossSalesCents: number
 }

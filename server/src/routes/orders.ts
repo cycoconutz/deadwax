@@ -42,6 +42,7 @@ async function loadItems(orderIds: number[]): Promise<Map<number, OrderItemPubli
       quantity: orderItems.quantity,
       sellerId: orderItems.sellerId,
       sellerName: users.displayName,
+      status: orderItems.status,
     })
     .from(orderItems)
     .innerJoin(users, eq(users.id, orderItems.sellerId))
@@ -58,6 +59,7 @@ async function loadItems(orderIds: number[]): Promise<Map<number, OrderItemPubli
       quantity: row.quantity,
       sellerId: row.sellerId,
       sellerName: row.sellerName,
+      status: row.status,
     })
     grouped.set(row.orderId, list)
   }

@@ -141,6 +141,7 @@ export const orderItems = pgTable(
     artistSnapshot: varchar('artist_snapshot', { length: 120 }).notNull().default(''),
     priceCents: integer('price_cents').notNull(),
     quantity: integer('quantity').notNull(),
+    status: orderStatusEnum('status').notNull().default('paid').$type<OrderStatus>(),
   },
   (t) => [index('order_items_order_idx').on(t.orderId), index('order_items_seller_idx').on(t.sellerId)],
 )
