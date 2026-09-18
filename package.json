@@ -1,0 +1,30 @@
+{
+  "name": "deadwax",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "concurrently -n api,web -c magenta,cyan \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "npm run dev -w server",
+    "dev:client": "npm run dev -w client",
+    "build": "npm run build -w client && npm run build -w server",
+    "typecheck": "npm run typecheck -w server && npm run typecheck -w client",
+    "lint": "npm run lint -w server && npm run lint -w client",
+    "db:start": "powershell -ExecutionPolicy Bypass -File scripts/db.ps1 start",
+    "db:stop": "powershell -ExecutionPolicy Bypass -File scripts/db.ps1 stop",
+    "db:status": "powershell -ExecutionPolicy Bypass -File scripts/db.ps1 status",
+    "db:generate": "npm run db:generate -w server",
+    "db:migrate": "npm run db:migrate -w server",
+    "db:seed": "npm run db:seed -w server",
+    "db:reset": "npm run db:reset -w server"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.5",
+    "oxlint": "^1.16.0"
+  }
+}
