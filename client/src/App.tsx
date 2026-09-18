@@ -1,16 +1,23 @@
 import { Link, Route, Routes, useNavigate } from 'react-router-dom'
 import { useAuth, useLogout } from './lib/auth'
+import { useCart } from './lib/cart'
 import Browse from './pages/Browse'
+import Cart from './pages/Cart'
+import Checkout from './pages/Checkout'
 import ListingDetail from './pages/ListingDetail'
 import Login from './pages/Login'
 import NotFound from './pages/NotFound'
+import OrderDetail from './pages/OrderDetail'
+import Orders from './pages/Orders'
 import Register from './pages/Register'
 import Sell from './pages/Sell'
 
 function Header() {
   const { user, isPending } = useAuth()
+  const cart = useCart(Boolean(user))
   const logout = useLogout()
   const navigate = useNavigate()
+  const cartCount = cart.data?.itemCount ?? 0
 
   function onLogout() {
     logout.mutate(undefined, { onSuccess: () => navigate('/') })
@@ -24,6 +31,11 @@ function Header() {
       <nav className="site-nav">
         <Link to="/">Browse</Link>
         <Link to="/sell">Sell</Link>
+        {user && <Link to="/orders">Orders</Link>}
+        <Link to="/cart" className="nav-cart">
+          Cart
+          {cartCount > 0 && <span className="nav-badge">{cartCount}</span>}
+        </Link>
         {isPending && <span className="mono nav-muted">…</span>}
         {!isPending && user && (
           <>
@@ -64,6 +76,10 @@ export default function App() {
           <Route path="/" element={<Browse />} />
           <Route path="/listings/:id" element={<ListingDetail />} />
           <Route path="/sell" element={<Sell />} />
+          <Route path="/cart" element={<Cart />} />
+          <Route path="/checkout" element={<Checkout />} />
+          <Route path="/orders" element={<Orders />} />
+          <Route path="/orders/:id" element={<OrderDetail />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="*" element={<NotFound />} />

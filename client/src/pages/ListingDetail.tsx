@@ -1,6 +1,8 @@
 import { Link, useParams } from 'react-router-dom'
 import { CONDITION_LABELS, formatPrice } from '@deadwax/shared'
 import Sleeve from '../components/Sleeve'
+import { useAuth } from '../lib/auth'
+import { useAddToCart } from '../lib/cart'
 import { useListing } from '../lib/listings'
 
 function Stars({ rating }: { rating: number }) {
@@ -17,6 +19,8 @@ export default function ListingDetail() {
   const listingId = Number(id)
   const validId = Number.isInteger(listingId) && listingId > 0
   const query = useListing(validId ? listingId : undefined)
+  const { user } = useAuth()
+  const addToCart = useAddToCart()
 
   if (validId && query.isPending) {
     return (
@@ -107,15 +111,28 @@ export default function ListingDetail() {
 
           {listing.description && <p className="detail-desc">{listing.description}</p>}
 
-          <button
-            className="btn buy-btn"
-            type="button"
-            disabled
-            title="Cart and checkout arrive in the next build"
-          >
-            Add to cart
-          </button>
-          <p className="mono detail-note">Cart and checkout arrive next.</p>
+          {user ? (
+            <button
+              className="btn buy-btn"
+              type="button"
+              disabled={listing.stock < 1 || addToCart.isPending}
+              onClick={() => addToCart.mutate({ listingId: listing.id, quantity: 1 })}
+            >
+              {listing.stock < 1
+                ? 'Sold out'
+                : addToCart.isPending
+                  ? 'Adding…'
+                  : 'Add to cart'}
+            </button>
+          ) : (
+            <Link className="btn buy-btn" to="/login">
+              Sign in to buy
+            </Link>
+          )}
+          {addToCart.isSuccess && <p className="mono detail-note">Added to your cart.</p>}
+          {addToCart.isError && (
+            <p className="mono form-error detail-note">{addToCart.error.message}</p>
+          )}
         </div>
       </article>
 

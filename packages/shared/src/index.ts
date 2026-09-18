@@ -204,3 +204,69 @@ export interface Paginated<T> {
   total: number
   totalPages: number
 }
+
+/* ------------------------------- cart --------------------------------- */
+
+export interface CartLine {
+  listingId: number
+  quantity: number
+  title: string
+  artist: string
+  coverImageUrl: string
+  priceCents: number
+  stock: number
+  sellerId: number
+  status: ListingStatus
+  lineTotalCents: number
+}
+
+export interface CartResponse {
+  lines: CartLine[]
+  subtotalCents: number
+  shippingCents: number
+  totalCents: number
+  itemCount: number
+}
+
+/* ------------------------------ orders -------------------------------- */
+
+export interface OrderItemPublic {
+  id: number
+  listingId: number | null
+  title: string
+  artist: string
+  priceCents: number
+  quantity: number
+  sellerId: number
+  sellerName: string
+}
+
+export interface OrderSummary {
+  id: number
+  status: OrderStatus
+  subtotalCents: number
+  shippingCents: number
+  totalCents: number
+  createdAt: string
+  itemCount: number
+  items: OrderItemPublic[]
+}
+
+export interface OrderPayment {
+  provider: string
+  status: string
+  amountCents: number
+  cardLast4: string
+  failureReason: string | null
+}
+
+export interface OrderDetail extends OrderSummary {
+  shippingName: string
+  shippingAddress1: string
+  shippingAddress2: string
+  shippingCity: string
+  shippingRegion: string
+  shippingPostal: string
+  shippingCountry: string
+  payment: OrderPayment | null
+}
