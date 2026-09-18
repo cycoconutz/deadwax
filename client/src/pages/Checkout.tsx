@@ -89,6 +89,21 @@ export default function Checkout() {
     )
   }
 
+  if (cart.isError) {
+    return (
+      <div className="page">
+        <div className="state">
+          <p className="kicker mono">Checkout</p>
+          <h1 className="state-title">Cart unavailable</h1>
+          <p>We could not load your cart. Please try again in a moment.</p>
+          <Link className="btn" to="/cart">
+            Back to cart
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="page">
       <p className="kicker mono">Checkout</p>

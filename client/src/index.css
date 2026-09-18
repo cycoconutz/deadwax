@@ -1449,3 +1449,32 @@ button {
   color: var(--blue);
   border-bottom: 1px solid var(--blue);
 }
+
+@media (max-width: 720px) {
+  .site-header {
+    flex-wrap: wrap;
+    row-gap: 10px;
+  }
+
+  .site-nav {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 12px;
+    row-gap: 8px;
+  }
+
+  .wordmark {
+    font-size: 1.9rem;
+  }
+}
+
+@media (max-width: 560px) {
+  .order-item-row {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .stat-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
