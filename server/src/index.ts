@@ -7,6 +7,7 @@ import helmet from '@fastify/helmet'
 import fastifyStatic from '@fastify/static'
 import { env, isProd } from './env'
 import { getSessionUser, SESSION_COOKIE, type SessionUser } from './lib/session'
+import authRoutes from './routes/auth'
 import healthRoutes from './routes/health'
 
 declare module 'fastify' {
@@ -39,6 +40,7 @@ app.addHook('onRequest', async (request) => {
 })
 
 await app.register(healthRoutes, { prefix: '/api' })
+await app.register(authRoutes, { prefix: '/api' })
 
 if (clientDist) {
   await app.register(fastifyStatic, { root: clientDist, index: ['index.html'] })

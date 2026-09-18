@@ -1,8 +1,10 @@
 import { createHash, randomBytes } from 'node:crypto'
+import type { FastifyReply } from 'fastify'
 import { and, eq, gt, lt } from 'drizzle-orm'
 import type { Role } from '@deadwax/shared'
 import { db } from '../db/index'
 import { sessions, users } from '../db/schema'
+import { isProd } from '../env'
 
 export const SESSION_COOKIE = 'dw_session'
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000
@@ -51,4 +53,22 @@ export async function deleteSession(token: string): Promise<void> {
 
 export async function deleteExpiredSessions(): Promise<void> {
   await db.delete(sessions).where(lt(sessions.expiresAt, new Date()))
+}
+
+export function setSessionCookie(
+  reply: FastifyReply,
+  token: string,
+  expiresAt: Date,
+): void {
+  reply.setCookie(SESSION_COOKIE, token, {
+    path: '/',
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: isProd,
+    expires: expiresAt,
+  })
+}
+
+export function clearSessionCookie(reply: FastifyReply): void {
+  reply.clearCookie(SESSION_COOKIE, { path: '/' })
 }
