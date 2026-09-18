@@ -1318,3 +1318,134 @@ button {
     row-gap: 10px;
   }
 }
+
+/* ------------------------------- reviews ------------------------------- */
+
+.order-items-list li {
+  display: block;
+}
+
+.order-item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.order-reviewed {
+  margin-top: 6px;
+  color: var(--blue);
+  font-size: 0.7rem;
+}
+
+.review-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+  border: 1.5px dashed var(--ink);
+  background: var(--paper);
+  padding: 12px;
+}
+
+.star-picker {
+  display: flex;
+  gap: 4px;
+}
+
+.star {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--paper-3);
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.star.is-on {
+  color: var(--yellow);
+  text-shadow: 1px 1px 0 var(--ink);
+}
+
+.review-textarea {
+  width: 100%;
+  resize: vertical;
+  font-family: var(--font-mono);
+}
+
+.review-form-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* -------------------------------- admin -------------------------------- */
+
+.table-wrap {
+  overflow-x: auto;
+  margin-top: 14px;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.admin-table th {
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.62rem;
+  border-bottom: var(--line);
+  padding: 8px 10px;
+}
+
+.admin-table td {
+  border-bottom: 1px dashed var(--paper-3);
+  padding: 9px 10px;
+  vertical-align: top;
+}
+
+.admin-title {
+  font-weight: 600;
+  border-bottom: 2px solid transparent;
+}
+
+.admin-title:hover {
+  border-color: var(--ink);
+}
+
+.admin-sub {
+  display: block;
+  font-size: 0.68rem;
+  color: var(--ink-soft);
+}
+
+.mini-status.status-archived {
+  background: var(--paper-3);
+}
+
+.admin-reviews {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.admin-review {
+  border: var(--line);
+  background: var(--paper-2);
+  padding: 12px 14px;
+}
+
+.admin-review-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.admin-review-listing {
+  color: var(--blue);
+  border-bottom: 1px solid var(--blue);
+}

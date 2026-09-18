@@ -1,13 +1,15 @@
-import { eq, sql } from 'drizzle-orm'
+import { randomUUID } from 'node:crypto'
+import { eq, inArray, sql } from 'drizzle-orm'
 import { db, client } from './index'
-import { listings, users } from './schema'
+import { listings, orderItems, orders, payments, reviews, users } from './schema'
 import { hashPassword } from '../lib/password'
-import type { Condition, Genre } from '@deadwax/shared'
+import { shippingFlatCents, type Condition, type Genre, type Role } from '@deadwax/shared'
 
-interface SeedSeller {
+interface SeedAccount {
   email: string
   displayName: string
   password: string
+  role: Role
 }
 
 interface SeedListing {
@@ -24,16 +26,31 @@ interface SeedListing {
   note: string
 }
 
-const SELLERS: SeedSeller[] = [
-  { email: 'groove.merchant@deadwax.test', displayName: 'Groove Merchant', password: 'spinthis33' },
-  { email: 'needle.drop@deadwax.test', displayName: 'Needle Drop Records', password: 'spinthis33' },
-  { email: 'basement.tapes@deadwax.test', displayName: 'Basement Tapes', password: 'spinthis33' },
+const SELLERS: SeedAccount[] = [
+  { email: 'groove.merchant@deadwax.test', displayName: 'Groove Merchant', password: 'spinthis33', role: 'seller' },
+  { email: 'needle.drop@deadwax.test', displayName: 'Needle Drop Records', password: 'spinthis33', role: 'seller' },
+  { email: 'basement.tapes@deadwax.test', displayName: 'Basement Tapes', password: 'spinthis33', role: 'seller' },
   {
     email: 'first.pressings@deadwax.test',
     displayName: 'First Pressings Only',
     password: 'spinthis33',
+    role: 'seller',
   },
 ]
+
+const ADMIN: SeedAccount = {
+  email: 'admin@deadwax.test',
+  displayName: 'Deadwax Admin',
+  password: 'spinthis33',
+  role: 'admin',
+}
+
+const DEMO_BUYER: SeedAccount = {
+  email: 'crate.digger@deadwax.test',
+  displayName: 'Crate Digger',
+  password: 'spinthis33',
+  role: 'buyer',
+}
 
 const LISTINGS: SeedListing[] = [
   { seller: 3, title: 'Kind of Blue', artist: 'Miles Davis', label: 'Columbia', catalogNumber: 'CS 8163', releaseYear: 1959, genre: 'Jazz', condition: 'NM', priceCents: 4500, stock: 1, note: 'Six-eye pressing, deep groove. Vinyl glossy, plays dead quiet. Jacket still in shrink with original price sticker.' },
@@ -78,28 +95,138 @@ const LISTINGS: SeedListing[] = [
   { seller: 0, title: 'Pet Sounds', artist: 'The Beach Boys', label: 'Capitol', catalogNumber: 'T 2458', releaseYear: 1966, genre: 'Pop', condition: 'VG', priceCents: 4800, stock: 1, note: 'Mono original. Sleeve has a seam split at the top, vinyl is a clean VG with strong playback.' },
 ]
 
-async function upsertSeller(seller: SeedSeller): Promise<number> {
+async function upsertAccount(account: SeedAccount): Promise<number> {
   const existing = await db
     .select({ id: users.id })
     .from(users)
-    .where(eq(users.email, seller.email))
+    .where(eq(users.email, account.email))
     .limit(1)
   if (existing[0]) return existing[0].id
 
-  const passwordHash = await hashPassword(seller.password)
+  const passwordHash = await hashPassword(account.password)
   const inserted = await db
     .insert(users)
     .values({
-      email: seller.email,
-      displayName: seller.displayName,
+      email: account.email,
+      displayName: account.displayName,
       passwordHash,
-      role: 'seller',
+      role: account.role,
     })
     .returning({ id: users.id })
 
   const row = inserted[0]
-  if (!row) throw new Error(`Failed to create seller ${seller.email}`)
+  if (!row) throw new Error(`Failed to create account ${account.email}`)
   return row.id
+}
+
+const DEMO_REVIEWS: Record<string, { rating: number; body: string }> = {
+  Rumours: {
+    rating: 5,
+    body: 'Arrived fast and packed like a pro. The copy is cleaner than described — no noise at all.',
+  },
+  'Remain in Light': {
+    rating: 4,
+    body: 'Great pressing, exactly as graded. Once in a Lifetime never sounded so good.',
+  },
+  'Back to Black': {
+    rating: 5,
+    body: 'Mint as promised. This is how online vinyl should be done.',
+  },
+}
+
+async function seedDemoActivity(buyerId: number): Promise<void> {
+  const existing = await db
+    .select({ id: orders.id })
+    .from(orders)
+    .where(eq(orders.buyerId, buyerId))
+    .limit(1)
+  if (existing[0]) return
+
+  const titles = Object.keys(DEMO_REVIEWS)
+  const rows = await db
+    .select({
+      id: listings.id,
+      sellerId: listings.sellerId,
+      title: listings.title,
+      artist: listings.artist,
+      priceCents: listings.priceCents,
+    })
+    .from(listings)
+    .where(inArray(listings.title, titles))
+
+  if (rows.length !== titles.length) {
+    console.log('Demo activity skipped: expected listings not found.')
+    return
+  }
+
+  const subtotalCents = rows.reduce((sum, row) => sum + row.priceCents, 0)
+  const totalCents = subtotalCents + shippingFlatCents
+
+  const insertedOrder = await db
+    .insert(orders)
+    .values({
+      buyerId,
+      status: 'delivered',
+      subtotalCents,
+      shippingCents: shippingFlatCents,
+      totalCents,
+      shippingName: 'Crate Digger',
+      shippingAddress1: '33 RPM Lane',
+      shippingCity: 'Detroit',
+      shippingRegion: 'MI',
+      shippingPostal: '48201',
+      shippingCountry: 'US',
+    })
+    .returning({ id: orders.id })
+
+  const orderId = insertedOrder[0]?.id
+  if (!orderId) throw new Error('Failed to create demo order')
+
+  for (const row of rows) {
+    const review = DEMO_REVIEWS[row.title]
+    if (!review) continue
+
+    const insertedItem = await db
+      .insert(orderItems)
+      .values({
+        orderId,
+        listingId: row.id,
+        sellerId: row.sellerId,
+        titleSnapshot: row.title,
+        artistSnapshot: row.artist,
+        priceCents: row.priceCents,
+        quantity: 1,
+        status: 'delivered',
+      })
+      .returning({ id: orderItems.id })
+
+    const orderItemId = insertedItem[0]?.id
+    if (!orderItemId) throw new Error('Failed to create demo order item')
+
+    await db.insert(reviews).values({
+      orderItemId,
+      listingId: row.id,
+      buyerId,
+      rating: review.rating,
+      body: review.body,
+    })
+
+    await db
+      .update(listings)
+      .set({ stock: sql`${listings.stock} - 1` })
+      .where(eq(listings.id, row.id))
+  }
+
+  await db.insert(payments).values({
+    orderId,
+    provider: 'simulated',
+    providerRef: `sim_${randomUUID()}`,
+    status: 'succeeded',
+    amountCents: totalCents,
+    cardLast4: '4242',
+  })
+
+  console.log(`Seeded demo order #${orderId} with ${rows.length} delivered reviews.`)
 }
 
 async function main() {
@@ -107,8 +234,10 @@ async function main() {
 
   const sellerIds: number[] = []
   for (const seller of SELLERS) {
-    sellerIds.push(await upsertSeller(seller))
+    sellerIds.push(await upsertAccount(seller))
   }
+  await upsertAccount(ADMIN)
+  const buyerId = await upsertAccount(DEMO_BUYER)
 
   const countRows = await db
     .select({ value: sql<number>`count(*)::int` })
@@ -121,7 +250,10 @@ async function main() {
     return
   }
 
-  if (force) await db.delete(listings)
+  if (force) {
+    await db.delete(orders)
+    await db.delete(listings)
+  }
 
   const rows = LISTINGS.map((listing) => {
     const sellerId = sellerIds[listing.seller]
@@ -145,6 +277,8 @@ async function main() {
 
   await db.insert(listings).values(rows)
   console.log(`Seeded ${rows.length} listings from ${SELLERS.length} sellers.`)
+
+  await seedDemoActivity(buyerId)
 
   await client.end()
 }

@@ -240,6 +240,50 @@ export interface OrderItemPublic {
   sellerId: number
   sellerName: string
   status: OrderStatus
+  reviewed: boolean
+}
+
+/* ------------------------------ reviews -------------------------------- */
+
+export interface ReviewableItem {
+  orderItemId: number
+  orderId: number
+  listingId: number
+  title: string
+  artist: string
+  status: OrderStatus
+}
+
+/* ------------------------------- admin --------------------------------- */
+
+export interface AdminSummary {
+  users: number
+  sellers: number
+  listings: number
+  activeListings: number
+  orders: number
+  grossSalesCents: number
+  reviews: number
+}
+
+export interface AdminUser {
+  id: number
+  email: string
+  displayName: string
+  role: Role
+  createdAt: string
+  listingCount: number
+  orderCount: number
+}
+
+export interface AdminReview {
+  id: number
+  rating: number
+  body: string
+  createdAt: string
+  buyerName: string
+  listingId: number
+  listingTitle: string
 }
 
 export interface OrderSummary {

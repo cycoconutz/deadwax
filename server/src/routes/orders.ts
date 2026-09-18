@@ -9,7 +9,7 @@ import {
   type OrderSummary,
 } from '@deadwax/shared'
 import { db } from '../db/index'
-import { cartItems, listings, orderItems, orders, payments, users } from '../db/schema'
+import { cartItems, listings, orderItems, orders, payments, reviews, users } from '../db/schema'
 
 interface OrderRow {
   id: number
@@ -43,9 +43,11 @@ async function loadItems(orderIds: number[]): Promise<Map<number, OrderItemPubli
       sellerId: orderItems.sellerId,
       sellerName: users.displayName,
       status: orderItems.status,
+      reviewedId: reviews.id,
     })
     .from(orderItems)
     .innerJoin(users, eq(users.id, orderItems.sellerId))
+    .leftJoin(reviews, eq(reviews.orderItemId, orderItems.id))
     .where(inArray(orderItems.orderId, orderIds))
 
   for (const row of rows) {
@@ -60,6 +62,7 @@ async function loadItems(orderIds: number[]): Promise<Map<number, OrderItemPubli
       sellerId: row.sellerId,
       sellerName: row.sellerName,
       status: row.status,
+      reviewed: row.reviewedId !== null,
     })
     grouped.set(row.orderId, list)
   }

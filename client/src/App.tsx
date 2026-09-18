@@ -1,6 +1,7 @@
 import { Link, Route, Routes, useNavigate } from 'react-router-dom'
 import { useAuth, useLogout } from './lib/auth'
 import { useCart } from './lib/cart'
+import Admin from './pages/Admin'
 import Browse from './pages/Browse'
 import Cart from './pages/Cart'
 import Checkout from './pages/Checkout'
@@ -35,6 +36,7 @@ function Header() {
         {user && (user.role === 'seller' || user.role === 'admin') && (
           <Link to="/seller">Dashboard</Link>
         )}
+        {user && user.role === 'admin' && <Link to="/admin">Admin</Link>}
         {user && <Link to="/orders">Orders</Link>}
         <Link to="/cart" className="nav-cart">
           Cart
@@ -81,6 +83,7 @@ export default function App() {
           <Route path="/listings/:id" element={<ListingDetail />} />
           <Route path="/sell" element={<Sell />} />
           <Route path="/seller" element={<Seller />} />
+          <Route path="/admin" element={<Admin />} />
           <Route path="/cart" element={<Cart />} />
           <Route path="/checkout" element={<Checkout />} />
           <Route path="/orders" element={<Orders />} />

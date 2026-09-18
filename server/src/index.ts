@@ -8,10 +8,12 @@ import fastifyStatic from '@fastify/static'
 import { env, isProd } from './env'
 import { getSessionUser, SESSION_COOKIE, type SessionUser } from './lib/session'
 import authRoutes from './routes/auth'
+import adminRoutes from './routes/admin'
 import cartRoutes from './routes/cart'
 import healthRoutes from './routes/health'
 import listingRoutes from './routes/listings'
 import orderRoutes from './routes/orders'
+import reviewRoutes from './routes/reviews'
 import sellerRoutes from './routes/seller'
 
 declare module 'fastify' {
@@ -49,6 +51,8 @@ await app.register(listingRoutes, { prefix: '/api' })
 await app.register(cartRoutes, { prefix: '/api' })
 await app.register(orderRoutes, { prefix: '/api' })
 await app.register(sellerRoutes, { prefix: '/api' })
+await app.register(reviewRoutes, { prefix: '/api' })
+await app.register(adminRoutes, { prefix: '/api' })
 
 if (clientDist) {
   await app.register(fastifyStatic, { root: clientDist, index: ['index.html'] })
