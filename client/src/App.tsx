@@ -1,9 +1,11 @@
 import { Link, Route, Routes, useNavigate } from 'react-router-dom'
 import { useAuth, useLogout } from './lib/auth'
-import Home from './pages/Home'
+import Browse from './pages/Browse'
+import ListingDetail from './pages/ListingDetail'
 import Login from './pages/Login'
 import NotFound from './pages/NotFound'
 import Register from './pages/Register'
+import Sell from './pages/Sell'
 
 function Header() {
   const { user, isPending } = useAuth()
@@ -21,6 +23,7 @@ function Header() {
       </Link>
       <nav className="site-nav">
         <Link to="/">Browse</Link>
+        <Link to="/sell">Sell</Link>
         {isPending && <span className="mono nav-muted">…</span>}
         {!isPending && user && (
           <>
@@ -58,7 +61,9 @@ export default function App() {
 
       <main className="site-main">
         <Routes>
-          <Route path="/" element={<Home />} />
+          <Route path="/" element={<Browse />} />
+          <Route path="/listings/:id" element={<ListingDetail />} />
+          <Route path="/sell" element={<Sell />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="*" element={<NotFound />} />

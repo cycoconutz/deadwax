@@ -157,3 +157,50 @@ export interface ApiErrorBody {
   message: string
   details?: unknown
 }
+
+/* --------------------------- api payloads -------------------------- */
+
+export interface PublicUser {
+  id: number
+  displayName: string
+}
+
+export interface ListingSummary {
+  id: number
+  sellerId: number
+  sellerName: string
+  title: string
+  artist: string
+  label: string
+  catalogNumber: string
+  releaseYear: number | null
+  genre: Genre
+  condition: Condition
+  priceCents: number
+  stock: number
+  coverImageUrl: string
+  status: ListingStatus
+  createdAt: string
+}
+
+export interface ListingDetail extends ListingSummary {
+  description: string
+  ratingAverage: number | null
+  reviewCount: number
+}
+
+export interface PublicReview {
+  id: number
+  rating: number
+  body: string
+  createdAt: string
+  buyerName: string
+}
+
+export interface Paginated<T> {
+  data: T[]
+  page: number
+  pageSize: number
+  total: number
+  totalPages: number
+}
