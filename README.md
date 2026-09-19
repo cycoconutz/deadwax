@@ -5,9 +5,6 @@ grade, build a cart, check out with a simulated card, and track orders from inde
 sellers. Sellers get a dashboard to manage inventory and fulfill orders; admins get a back
 office for moderation.
 
-This is the third site in a portfolio series and the first one that is **full-stack**:
-a React client, a Fastify API, and a PostgreSQL database — instead of a static page.
-
 ## Features
 
 - **Accounts** — email/password auth with server-side sessions (`scrypt` hashes, httpOnly
