@@ -1478,3 +1478,164 @@ button {
     grid-template-columns: 1fr 1fr;
   }
 }
+
+
+/* ------------------------- Demo accounts intro modal ------------------------- */
+.demo-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(22, 19, 15, 0.72);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  animation: demo-fade 0.18s ease;
+}
+
+@keyframes demo-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.demo-box {
+  position: relative;
+  width: min(620px, 100%);
+  max-height: min(88vh, 680px);
+  overflow-y: auto;
+  background: var(--paper-2);
+  border: var(--line);
+  box-shadow: 8px 8px 0 var(--ink);
+  padding: clamp(22px, 4vw, 40px);
+}
+
+.demo-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 38px;
+  height: 38px;
+  background: var(--paper-2);
+  color: var(--ink);
+  border: var(--line);
+  box-shadow: 3px 3px 0 var(--ink);
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.demo-close:hover {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 var(--ink);
+}
+
+.demo-title {
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 6vw, 3.4rem);
+  line-height: 0.95;
+  text-transform: uppercase;
+  margin: 8px 0 16px;
+}
+
+.demo-lede {
+  margin: 0 0 16px;
+}
+
+.demo-pwhint {
+  display: block;
+  background: var(--yellow);
+  border: var(--line);
+  padding: 6px 10px;
+  margin: 0 0 20px;
+}
+
+.demo-pw {
+  background: var(--paper);
+  border: 1.5px solid var(--ink);
+  padding: 2px 6px;
+  font-weight: 700;
+}
+
+.demo-list {
+  list-style: none;
+  margin: 0 0 24px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.demo-row {
+  border: var(--line);
+  background: var(--paper);
+  box-shadow: 4px 4px 0 var(--ink);
+  padding: 12px 14px;
+}
+
+.demo-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.demo-role {
+  background: var(--blue);
+  color: var(--paper);
+  padding: 2px 8px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+}
+
+.demo-email {
+  font-size: 0.82rem;
+  word-break: break-all;
+}
+
+.demo-blurb {
+  margin: 0;
+  font-size: 0.95rem;
+}
+.demo-name {
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+}
+
+.demo-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.demo-secret {
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+}
+
+
+.demo-chip {
+  appearance: none;
+  font-family: var(--font-mono);
+  background: var(--yellow);
+  color: var(--ink);
+  border: var(--line);
+  box-shadow: 3px 3px 0 var(--ink);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 3px 10px;
+  cursor: pointer;
+  line-height: 1.4;
+}
+.demo-chip:hover {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 var(--ink);
+}

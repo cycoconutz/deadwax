@@ -36,6 +36,12 @@ const SELLERS: SeedAccount[] = [
     password: 'spinthis33',
     role: 'seller',
   },
+  {
+    email: 'both.sides@deadwax.test',
+    displayName: 'Both Sides',
+    password: 'spinthis33',
+    role: 'seller',
+  },
 ]
 
 const ADMIN: SeedAccount = {
@@ -93,6 +99,9 @@ const LISTINGS: SeedListing[] = [
   { seller: 1, title: 'OK Computer', artist: 'Radiohead', label: 'Parlophone', catalogNumber: 'NODATA 02', releaseYear: 1997, genre: 'Rock', condition: 'NM', priceCents: 3600, stock: 1, note: 'Original Parlophone double LP. Barely played, sleeve sharp as new.' },
   { seller: 2, title: 'The Velvet Underground & Nico', artist: 'The Velvet Underground', label: 'Verve', catalogNumber: 'V6-5008', releaseYear: 1967, genre: 'Rock', condition: 'G+', priceCents: 9500, stock: 1, note: 'Peelable banana sleeve, partially peeled and unpeeled on the back. Honest G+ vinyl, priced accordingly.' },
   { seller: 0, title: 'Pet Sounds', artist: 'The Beach Boys', label: 'Capitol', catalogNumber: 'T 2458', releaseYear: 1966, genre: 'Pop', condition: 'VG', priceCents: 4800, stock: 1, note: 'Mono original. Sleeve has a seam split at the top, vinyl is a clean VG with strong playback.' },
+  { seller: 4, title: 'The Freewheelin\u2019 Bob Dylan', artist: 'Bob Dylan', label: 'Columbia', catalogNumber: 'CS 8786', releaseYear: 1963, genre: 'Folk', condition: 'VG+', priceCents: 2800, stock: 1, note: 'With the original Mono fold-out insert. Buy-side copy from a moving sale; I grabbed a second for trade.' },
+  { seller: 4, title: 'Bridge over Troubled Water', artist: 'Simon & Garfunkel', label: 'Columbia', catalogNumber: 'KCS 9914', releaseYear: 1970, genre: 'Folk', condition: 'VG', priceCents: 1600, stock: 1, note: 'Gatefold with the standing-on-the-curb cover. Inner has a name written in pen; vinyl is steady VG.' },
+  { seller: 4, title: 'Another Green World', artist: 'Brian Eno', label: 'Island', catalogNumber: 'ILPS 9351', releaseYear: 1975, genre: 'Electronic', condition: 'NM', priceCents: 3200, stock: 1, note: 'The Birch. Original Island pressing, deep orange labels. Sleeve crisp, vinyl glossy, plays like glass.' },
 ]
 
 async function upsertAccount(account: SeedAccount): Promise<number> {
@@ -134,7 +143,26 @@ const DEMO_REVIEWS: Record<string, { rating: number; body: string }> = {
   },
 }
 
-async function seedDemoActivity(buyerId: number): Promise<void> {
+const DEMO_REVIEWS_BOTH: Record<string, { rating: number; body: string }> = {
+  'Blue Train': {
+    rating: 5,
+    body: 'Sonny is clean as advertised. This goes straight into the listening stack — and on the flip wall.',
+  },
+  'Unknown Pleasures': {
+    rating: 4,
+    body: 'Textured sleeve in strong shape)Skip. Sealed in a fresh poly, priced to move.',
+  },
+  'Maggot Brain': {
+    rating: 5,
+    body: 'The guitar sermon, bought for the shop shelf. Clean as graded, ready to make someone stare at the ceiling.',
+  },
+}
+
+async function seedDemoActivity(
+  buyerId: number,
+  reviewMap: Record<string, { rating: number; body: string }>,
+  shippingName: string,
+): Promise<void> {
   const existing = await db
     .select({ id: orders.id })
     .from(orders)
@@ -142,7 +170,7 @@ async function seedDemoActivity(buyerId: number): Promise<void> {
     .limit(1)
   if (existing[0]) return
 
-  const titles = Object.keys(DEMO_REVIEWS)
+  const titles = Object.keys(reviewMap)
   const rows = await db
     .select({
       id: listings.id,
@@ -170,7 +198,7 @@ async function seedDemoActivity(buyerId: number): Promise<void> {
       subtotalCents,
       shippingCents: shippingFlatCents,
       totalCents,
-      shippingName: 'Crate Digger',
+      shippingName,
       shippingAddress1: '33 RPM Lane',
       shippingCity: 'Detroit',
       shippingRegion: 'MI',
@@ -183,7 +211,7 @@ async function seedDemoActivity(buyerId: number): Promise<void> {
   if (!orderId) throw new Error('Failed to create demo order')
 
   for (const row of rows) {
-    const review = DEMO_REVIEWS[row.title]
+    const review = reviewMap[row.title]
     if (!review) continue
 
     const insertedItem = await db
@@ -239,16 +267,10 @@ async function main() {
   await upsertAccount(ADMIN)
   const buyerId = await upsertAccount(DEMO_BUYER)
 
-  const countRows = await db
-    .select({ value: sql<number>`count(*)::int` })
+  const existingRows = await db
+    .select({ sellerId: listings.sellerId, title: listings.title })
     .from(listings)
-  const existing = countRows[0]?.value ?? 0
-
-  if (existing > 0 && !force) {
-    console.log(`Seed skipped: ${existing} listings already present (use --force to reseed).`)
-    await client.end()
-    return
-  }
+  const existingKeys = new Set(existingRows.map((row) => `${row.sellerId}:${row.title}`))
 
   if (force) {
     await db.delete(orders)
@@ -275,10 +297,22 @@ async function main() {
     }
   })
 
-  await db.insert(listings).values(rows)
-  console.log(`Seeded ${rows.length} listings from ${SELLERS.length} sellers.`)
+  const missing = rows.filter((row) => !existingKeys.has(`${row.sellerId}:${row.title}`))
+  if (force) {
+    await db.insert(listings).values(rows)
+    console.log(`Seeded ${rows.length} listings from ${SELLERS.length} sellers.`)
+  } else if (missing.length > 0) {
+    await db.insert(listings).values(missing)
+    console.log(`Seeded ${missing.length} new listings (${rows.length - missing.length} already present).`)
+  } else {
+    console.log(`Seed up to date: all ${rows.length} listings already present.`)
+  }
 
-  await seedDemoActivity(buyerId)
+  await seedDemoActivity(buyerId, DEMO_REVIEWS, DEMO_BUYER.displayName)
+
+  const bothSidesId = sellerIds[4]
+  if (!bothSidesId) throw new Error('Missing demo seller "Both Sides"')
+  await seedDemoActivity(bothSidesId, DEMO_REVIEWS_BOTH, 'Both Sides')
 
   await client.end()
 }
