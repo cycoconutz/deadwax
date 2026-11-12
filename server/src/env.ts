@@ -2,15 +2,19 @@ import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { z } from 'zod'
 
-const candidates = [
-  resolve(process.cwd(), '.env'),
-  resolve(process.cwd(), '../.env'),
-  resolve(process.cwd(), '../../.env'),
-]
-for (const path of candidates) {
-  if (existsSync(path)) {
-    process.loadEnvFile(path)
-    break
+// An explicit environment always wins. Tests and CI set DATABASE_URL directly
+// and must not be redirected by a developer's local .env file.
+if (!process.env.DATABASE_URL) {
+  const candidates = [
+    resolve(process.cwd(), '.env'),
+    resolve(process.cwd(), '../.env'),
+    resolve(process.cwd(), '../../.env'),
+  ]
+  for (const path of candidates) {
+    if (existsSync(path)) {
+      process.loadEnvFile(path)
+      break
+    }
   }
 }
 
