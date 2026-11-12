@@ -6,6 +6,7 @@ import helmet from '@fastify/helmet'
 import fastifyStatic from '@fastify/static'
 import { env, isProd } from './env'
 import { getSessionUser, SESSION_COOKIE, type SessionUser } from './lib/session'
+import { expireStaleOrders } from './lib/payment'
 import authRoutes from './routes/auth'
 import adminRoutes from './routes/admin'
 import cartRoutes from './routes/cart'
@@ -60,6 +61,29 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   await app.register(sellerRoutes, { prefix: '/api' })
   await app.register(reviewRoutes, { prefix: '/api' })
   await app.register(adminRoutes, { prefix: '/api' })
+
+  if (env.ORDER_SWEEP_INTERVAL_MS > 0) {
+    const sweep = (): void => {
+      expireStaleOrders()
+        .then((expired) => {
+          if (expired > 0) {
+            app.log.info({ expired }, 'released stock from abandoned orders')
+          }
+        })
+        .catch((error: unknown) => {
+          app.log.error(error, 'order sweep failed')
+        })
+    }
+
+    // Sweep once at boot. A host that slept through the timer is the exact
+    // case this protects against.
+    sweep()
+    const timer = setInterval(sweep, env.ORDER_SWEEP_INTERVAL_MS)
+    timer.unref()
+    app.addHook('onClose', async () => {
+      clearInterval(timer)
+    })
+  }
 
   if (clientDist) {
     await app.register(fastifyStatic, { root: clientDist, index: ['index.html'] })

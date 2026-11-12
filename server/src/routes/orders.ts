@@ -1,15 +1,15 @@
 import type { FastifyPluginAsync } from 'fastify'
-import { randomUUID } from 'node:crypto'
-import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm'
+import { desc, eq, inArray } from 'drizzle-orm'
 import {
   checkoutSchema,
-  shippingFlatCents,
   type OrderDetail,
   type OrderItemPublic,
   type OrderSummary,
 } from '@deadwax/shared'
 import { db } from '../db/index'
-import { cartItems, listings, orderItems, orders, payments, reviews, users } from '../db/schema'
+import { orderItems, orders, payments, reviews, users } from '../db/schema'
+import { createPendingOrder } from '../lib/checkout'
+import { confirmPayment } from '../lib/payment'
 
 interface OrderRow {
   id: number
@@ -69,21 +69,8 @@ async function loadItems(orderIds: number[]): Promise<Map<number, OrderItemPubli
   return grouped
 }
 
-/**
- * Thrown when the guarded stock update matches no row: another checkout took
- * the last copy between the availability read and the transaction.
- */
-class StockConflictError extends Error {
-  constructor(
-    readonly listingId: number,
-    readonly title: string,
-  ) {
-    super(`Listing ${listingId} no longer has enough stock`)
-    this.name = 'StockConflictError'
-  }
-}
-
-function toSummary(row: OrderRow, items: OrderItemPublic[]): OrderSummary {  return {
+function toSummary(row: OrderRow, items: OrderItemPublic[]): OrderSummary {
+  return {
     id: row.id,
     status: row.status,
     subtotalCents: row.subtotalCents,
@@ -108,134 +95,33 @@ const orderRoutes: FastifyPluginAsync = async (app) => {
         details: parsed.error.flatten(),
       })
     }
-    const input = parsed.data
-    const buyerId = request.user.id
+    const created = await createPendingOrder(request.user.id, parsed.data)
 
-    const cartRows = await db
-      .select({
-        listingId: cartItems.listingId,
-        quantity: cartItems.quantity,
-        priceCents: listings.priceCents,
-        stock: listings.stock,
-        status: listings.status,
-        sellerId: listings.sellerId,
-        title: listings.title,
-        artist: listings.artist,
-      })
-      .from(cartItems)
-      .innerJoin(listings, eq(listings.id, cartItems.listingId))
-      .where(eq(cartItems.userId, buyerId))
-
-    if (cartRows.length === 0) {
-      return reply.status(400).send({ error: 'empty_cart', message: 'Your cart is empty.' })
-    }
-
-    const unavailable = cartRows.filter(
-      (row) => row.status !== 'active' || row.stock < row.quantity,
-    )
-    if (unavailable.length > 0) {
+    if (!created.ok) {
+      if (created.reason === 'empty_cart') {
+        return reply.status(400).send({ error: 'empty_cart', message: 'Your cart is empty.' })
+      }
+      if (created.reason === 'payment_declined') {
+        return reply.status(402).send({
+          error: 'payment_declined',
+          message: 'Card declined. This demo rejects any card ending in 0002.',
+        })
+      }
       return reply.status(409).send({
         error: 'unavailable',
         message: 'Some records are no longer available in that quantity.',
-        details: unavailable.map((row) => ({ listingId: row.listingId, title: row.title })),
+        details: created.items,
       })
     }
 
-    const subtotalCents = cartRows.reduce((sum, row) => sum + row.priceCents * row.quantity, 0)
-    const shippingCents = shippingFlatCents
-    const totalCents = subtotalCents + shippingCents
-
-    const cardNumber = input.cardNumber.replace(/[\s-]+/g, '')
-    const cardLast4 = cardNumber.slice(-4)
-    if (cardLast4 === '0002') {
-      return reply.status(402).send({
-        error: 'payment_declined',
-        message: 'Card declined. This demo rejects any card ending in 0002.',
-      })
+    // Simulated payments clear immediately. A real provider confirms later,
+    // through the same function, so the state machine is identical.
+    const outcome = await confirmPayment(created.orderId)
+    if (outcome !== 'confirmed') {
+      request.log.warn({ orderId: created.orderId, outcome }, 'checkout order was not confirmed')
     }
 
-    try {
-      const orderId = await db.transaction(async (tx) => {
-        const inserted = await tx
-          .insert(orders)
-          .values({
-            buyerId,
-            status: 'paid',
-            subtotalCents,
-            shippingCents,
-            totalCents,
-            shippingName: input.shippingName,
-            shippingAddress1: input.shippingAddress1,
-            shippingAddress2: input.shippingAddress2 ?? '',
-            shippingCity: input.shippingCity,
-            shippingRegion: input.shippingRegion ?? '',
-            shippingPostal: input.shippingPostal,
-            shippingCountry: input.shippingCountry,
-          })
-          .returning({ id: orders.id })
-
-        const order = inserted[0]
-        if (!order) throw new Error('Failed to create order')
-
-        await tx.insert(orderItems).values(
-          cartRows.map((row) => ({
-            orderId: order.id,
-            listingId: row.listingId,
-            sellerId: row.sellerId,
-            titleSnapshot: row.title,
-            artistSnapshot: row.artist,
-            priceCents: row.priceCents,
-            quantity: row.quantity,
-          })),
-        )
-
-        await tx.insert(payments).values({
-          orderId: order.id,
-          provider: 'simulated',
-          providerRef: `sim_${randomUUID()}`,
-          status: 'succeeded',
-          amountCents: totalCents,
-          cardLast4,
-        })
-
-        // Claim the stock with a conditional update instead of writing the
-        // arithmetic result blindly. If another checkout got there first, no
-        // row matches, the whole transaction rolls back, and the buyer is told
-        // the record is gone. A blind decrement would drive stock negative and
-        // sell the same copy twice.
-        for (const row of cartRows) {
-          const claimed = await tx
-            .update(listings)
-            .set({ stock: sql`${listings.stock} - ${row.quantity}`, updatedAt: new Date() })
-            .where(
-              and(
-                eq(listings.id, row.listingId),
-                eq(listings.status, 'active'),
-                gte(listings.stock, row.quantity),
-              ),
-            )
-            .returning({ id: listings.id })
-
-          if (claimed.length === 0) {
-            throw new StockConflictError(row.listingId, row.title)
-          }
-        }
-
-        await tx.delete(cartItems).where(eq(cartItems.userId, buyerId))
-        return order.id
-      })
-
-      return reply.status(201).send({ orderId })
-    } catch (error) {
-      if (error instanceof StockConflictError) {
-        return reply.status(409).send({
-          error: 'unavailable',
-          message: 'Some records are no longer available in that quantity.',
-          details: [{ listingId: error.listingId, title: error.title }],
-        })
-      }
-      throw error
-    }
+    return reply.status(201).send({ orderId: created.orderId })
   })
 
   app.get('/orders', async (request, reply) => {

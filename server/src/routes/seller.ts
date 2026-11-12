@@ -12,6 +12,12 @@ import { listings, orderItems, orders, users } from '../db/schema'
 
 const statusSchema = z.object({ status: z.enum(ORDER_STATUSES) })
 
+/**
+ * Money moves an item to paid. A seller only moves it through fulfillment.
+ * Letting a seller PATCH an item to paid would let an unpaid order be shipped.
+ */
+const SELLER_TRANSITIONS = new Set<OrderStatus>(['shipped', 'delivered', 'cancelled'])
+
 function reduceOrderStatus(statuses: OrderStatus[]): OrderStatus {
   const active = statuses.filter((status) => status !== 'cancelled')
   if (statuses.length > 0 && active.length === 0) return 'cancelled'
@@ -147,6 +153,13 @@ const sellerRoutes: FastifyPluginAsync = async (app) => {
       })
     }
 
+    if (!SELLER_TRANSITIONS.has(parsed.data.status)) {
+      return reply.status(400).send({
+        error: 'invalid_transition',
+        message: 'Payment moves an item to paid. Sellers can mark it shipped, delivered or cancelled.',
+      })
+    }
+
     const itemRows = await db
       .select({ sellerId: orderItems.sellerId, orderId: orderItems.orderId })
       .from(orderItems)
@@ -158,6 +171,26 @@ const sellerRoutes: FastifyPluginAsync = async (app) => {
     }
     if (item.sellerId !== request.user.id && request.user.role !== 'admin') {
       return reply.status(403).send({ error: 'forbidden', message: 'Not your sale.' })
+    }
+
+    const orderRows = await db
+      .select({ status: orders.status })
+      .from(orders)
+      .where(eq(orders.id, item.orderId))
+      .limit(1)
+    const order = orderRows[0]
+    if (!order) {
+      return reply.status(404).send({ error: 'not_found', message: 'No such order.' })
+    }
+    if (order.status === 'pending') {
+      return reply
+        .status(409)
+        .send({ error: 'order_not_paid', message: 'That order has not been paid for yet.' })
+    }
+    if (order.status === 'cancelled') {
+      return reply
+        .status(409)
+        .send({ error: 'order_cancelled', message: 'That order was cancelled.' })
     }
 
     await db.update(orderItems).set({ status: parsed.data.status }).where(eq(orderItems.id, itemId))

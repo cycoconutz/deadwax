@@ -85,6 +85,18 @@ export function authHeaders(user: TestUser): Record<string, string> {
   return { cookie: user.cookie }
 }
 
+export const CHECKOUT_PAYLOAD = {
+  shippingName: 'Ada Lovelace',
+  shippingAddress1: '12 Marylebone Road',
+  shippingCity: 'London',
+  shippingPostal: 'NW1 5LA',
+  shippingCountry: 'GB',
+  cardNumber: '4242 4242 4242 4242',
+  cardExpiry: '12/30',
+  cardCvc: '123',
+  nameOnCard: 'Ada Lovelace',
+}
+
 let cachedPasswordHash: Promise<string> | null = null
 
 function testPasswordHash(): Promise<string> {

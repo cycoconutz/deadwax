@@ -19,4 +19,6 @@ export function applyTestEnv(): void {
   process.env.SESSION_SECRET = 'test-session-secret-at-least-32-chars'
   process.env.PAYMENT_WEBHOOK_SECRET = 'whsec_test_only'
   process.env.CLIENT_ORIGIN = 'http://localhost:5173'
+  // The sweeper is exercised directly in tests, never on a timer.
+  process.env.ORDER_SWEEP_INTERVAL_MS = '0'
 }

@@ -111,6 +111,12 @@ export const orders = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     status: orderStatusEnum('status').notNull().default('pending').$type<OrderStatus>(),
+    // Set only when a payment is confirmed. An order can move to paid from
+    // nowhere else, which is what makes the two states auditable.
+    paidAt: timestamp('paid_at', { withTimezone: true }),
+    // The moment stock was taken for this order. Cleared when an expired
+    // order releases it back to the listing.
+    stockReservedAt: timestamp('stock_reserved_at', { withTimezone: true }),
     subtotalCents: integer('subtotal_cents').notNull(),
     shippingCents: integer('shipping_cents').notNull(),
     totalCents: integer('total_cents').notNull(),

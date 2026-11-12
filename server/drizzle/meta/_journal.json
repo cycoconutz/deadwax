@@ -29,6 +29,13 @@
       "when": 1794519784658,
       "tag": "0003_magenta_grandmaster",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794521228995,
+      "tag": "0004_typical_snowbird",
+      "breakpoints": true
     }
   ]
 }
