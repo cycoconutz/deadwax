@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { randomUUID } from 'node:crypto'
-import { desc, eq, inArray, sql } from 'drizzle-orm'
+import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm'
 import {
   checkoutSchema,
   shippingFlatCents,
@@ -69,8 +69,21 @@ async function loadItems(orderIds: number[]): Promise<Map<number, OrderItemPubli
   return grouped
 }
 
-function toSummary(row: OrderRow, items: OrderItemPublic[]): OrderSummary {
-  return {
+/**
+ * Thrown when the guarded stock update matches no row: another checkout took
+ * the last copy between the availability read and the transaction.
+ */
+class StockConflictError extends Error {
+  constructor(
+    readonly listingId: number,
+    readonly title: string,
+  ) {
+    super(`Listing ${listingId} no longer has enough stock`)
+    this.name = 'StockConflictError'
+  }
+}
+
+function toSummary(row: OrderRow, items: OrderItemPublic[]): OrderSummary {  return {
     id: row.id,
     status: row.status,
     subtotalCents: row.subtotalCents,
@@ -141,61 +154,88 @@ const orderRoutes: FastifyPluginAsync = async (app) => {
       })
     }
 
-    const orderId = await db.transaction(async (tx) => {
-      const inserted = await tx
-        .insert(orders)
-        .values({
-          buyerId,
-          status: 'paid',
-          subtotalCents,
-          shippingCents,
-          totalCents,
-          shippingName: input.shippingName,
-          shippingAddress1: input.shippingAddress1,
-          shippingAddress2: input.shippingAddress2 ?? '',
-          shippingCity: input.shippingCity,
-          shippingRegion: input.shippingRegion ?? '',
-          shippingPostal: input.shippingPostal,
-          shippingCountry: input.shippingCountry,
-        })
-        .returning({ id: orders.id })
+    try {
+      const orderId = await db.transaction(async (tx) => {
+        const inserted = await tx
+          .insert(orders)
+          .values({
+            buyerId,
+            status: 'paid',
+            subtotalCents,
+            shippingCents,
+            totalCents,
+            shippingName: input.shippingName,
+            shippingAddress1: input.shippingAddress1,
+            shippingAddress2: input.shippingAddress2 ?? '',
+            shippingCity: input.shippingCity,
+            shippingRegion: input.shippingRegion ?? '',
+            shippingPostal: input.shippingPostal,
+            shippingCountry: input.shippingCountry,
+          })
+          .returning({ id: orders.id })
 
-      const order = inserted[0]
-      if (!order) throw new Error('Failed to create order')
+        const order = inserted[0]
+        if (!order) throw new Error('Failed to create order')
 
-      await tx.insert(orderItems).values(
-        cartRows.map((row) => ({
+        await tx.insert(orderItems).values(
+          cartRows.map((row) => ({
+            orderId: order.id,
+            listingId: row.listingId,
+            sellerId: row.sellerId,
+            titleSnapshot: row.title,
+            artistSnapshot: row.artist,
+            priceCents: row.priceCents,
+            quantity: row.quantity,
+          })),
+        )
+
+        await tx.insert(payments).values({
           orderId: order.id,
-          listingId: row.listingId,
-          sellerId: row.sellerId,
-          titleSnapshot: row.title,
-          artistSnapshot: row.artist,
-          priceCents: row.priceCents,
-          quantity: row.quantity,
-        })),
-      )
+          provider: 'simulated',
+          providerRef: `sim_${randomUUID()}`,
+          status: 'succeeded',
+          amountCents: totalCents,
+          cardLast4,
+        })
 
-      await tx.insert(payments).values({
-        orderId: order.id,
-        provider: 'simulated',
-        providerRef: `sim_${randomUUID()}`,
-        status: 'succeeded',
-        amountCents: totalCents,
-        cardLast4,
+        // Claim the stock with a conditional update instead of writing the
+        // arithmetic result blindly. If another checkout got there first, no
+        // row matches, the whole transaction rolls back, and the buyer is told
+        // the record is gone. A blind decrement would drive stock negative and
+        // sell the same copy twice.
+        for (const row of cartRows) {
+          const claimed = await tx
+            .update(listings)
+            .set({ stock: sql`${listings.stock} - ${row.quantity}`, updatedAt: new Date() })
+            .where(
+              and(
+                eq(listings.id, row.listingId),
+                eq(listings.status, 'active'),
+                gte(listings.stock, row.quantity),
+              ),
+            )
+            .returning({ id: listings.id })
+
+          if (claimed.length === 0) {
+            throw new StockConflictError(row.listingId, row.title)
+          }
+        }
+
+        await tx.delete(cartItems).where(eq(cartItems.userId, buyerId))
+        return order.id
       })
 
-      for (const row of cartRows) {
-        await tx
-          .update(listings)
-          .set({ stock: sql`${listings.stock} - ${row.quantity}`, updatedAt: new Date() })
-          .where(eq(listings.id, row.listingId))
+      return reply.status(201).send({ orderId })
+    } catch (error) {
+      if (error instanceof StockConflictError) {
+        return reply.status(409).send({
+          error: 'unavailable',
+          message: 'Some records are no longer available in that quantity.',
+          details: [{ listingId: error.listingId, title: error.title }],
+        })
       }
-
-      await tx.delete(cartItems).where(eq(cartItems.userId, buyerId))
-      return order.id
-    })
-
-    return reply.status(201).send({ orderId })
+      throw error
+    }
   })
 
   app.get('/orders', async (request, reply) => {

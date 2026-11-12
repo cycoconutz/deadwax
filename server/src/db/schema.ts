@@ -1,4 +1,5 @@
 import {
+  check,
   index,
   integer,
   pgEnum,
@@ -9,6 +10,7 @@ import {
   uniqueIndex,
   varchar,
 } from 'drizzle-orm/pg-core'
+import { sql } from 'drizzle-orm'
 import {
   CONDITIONS,
   GENRES,
@@ -77,6 +79,7 @@ export const listings = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
+    check('listings_stock_non_negative', sql`${t.stock} >= 0`),
     index('listings_seller_idx').on(t.sellerId),
     index('listings_status_idx').on(t.status),
     index('listings_genre_idx').on(t.genre),

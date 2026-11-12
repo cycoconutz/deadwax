@@ -2,7 +2,9 @@ import type { FastifyInstance, LightMyRequestResponse } from 'fastify'
 import { sql } from 'drizzle-orm'
 import { buildApp } from '../src/app'
 import { db } from '../src/db'
-import { listings } from '../src/db/schema'
+import { listings, users } from '../src/db/schema'
+import { hashPassword } from '../src/lib/password'
+import { createSession, SESSION_COOKIE } from '../src/lib/session'
 
 export async function makeApp(): Promise<FastifyInstance> {
   const app = await buildApp({ logger: false })
@@ -81,6 +83,49 @@ export async function register(
 
 export function authHeaders(user: TestUser): Record<string, string> {
   return { cookie: user.cookie }
+}
+
+let cachedPasswordHash: Promise<string> | null = null
+
+function testPasswordHash(): Promise<string> {
+  cachedPasswordHash ??= hashPassword('correct horse battery staple')
+  return cachedPasswordHash
+}
+
+export interface CreateUserOptions {
+  displayName?: string
+  role?: TestUser['role']
+}
+
+/**
+ * Inserts a user and a live session directly, so a suite that needs twenty
+ * accounts does not pay twenty scrypt hashes.
+ */
+export async function createUser(
+  email: string,
+  options: CreateUserOptions = {},
+): Promise<TestUser> {
+  const passwordHash = await testPasswordHash()
+  const rows = await db
+    .insert(users)
+    .values({
+      email,
+      passwordHash,
+      displayName: options.displayName ?? 'Test Buyer',
+      role: options.role ?? 'buyer',
+    })
+    .returning({
+      id: users.id,
+      email: users.email,
+      displayName: users.displayName,
+      role: users.role,
+    })
+
+  const row = rows[0]
+  if (!row) throw new Error('Failed to insert user fixture')
+
+  const { token } = await createSession(row.id)
+  return { ...row, cookie: `${SESSION_COOKIE}=${token}` }
 }
 
 export interface ListingOverrides {
