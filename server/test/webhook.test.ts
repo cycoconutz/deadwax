@@ -72,7 +72,7 @@ async function pendingOrderFor(email: string): Promise<number> {
   const listing = await createListing(seller.id, { stock: 1, priceCents: 2499 })
   await addToCart(buyer.id, listing.id)
 
-  const created = await createPendingOrder(buyer.id, CHECKOUT_PAYLOAD)
+  const created = await createPendingOrder(buyer.id, CHECKOUT_PAYLOAD, 'simulated')
   if (!created.ok) throw new Error(`could not create order: ${created.reason}`)
   return created.orderId
 }
@@ -83,6 +83,15 @@ async function orderById(orderId: number) {
   if (!row) throw new Error(`order ${orderId} not found`)
   return row
 }
+
+describe('GET /api/payments/config', () => {
+  it('tells the client which payment mode this deployment uses', async () => {
+    const response = await app.inject({ method: 'GET', url: '/api/payments/config' })
+
+    expect(response.statusCode).toBe(200)
+    expect(response.json()).toEqual({ mode: 'simulated' })
+  })
+})
 
 describe('POST /api/webhooks/stripe', () => {
   it('confirms the order behind a successful payment intent', async () => {

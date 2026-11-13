@@ -59,7 +59,7 @@ describe('order lifecycle', () => {
     const listing = await createListing(seller.id, { stock: 1, priceCents: 2499 })
     await addToCart(buyer.id, listing.id)
 
-    const created = await createPendingOrder(buyer.id, CHECKOUT_PAYLOAD)
+    const created = await createPendingOrder(buyer.id, CHECKOUT_PAYLOAD, 'simulated')
     expect(created.ok).toBe(true)
     if (!created.ok) return
 
@@ -85,7 +85,7 @@ describe('order lifecycle', () => {
     const listing = await createListing(seller.id, { stock: 1 })
     await addToCart(buyer.id, listing.id)
 
-    const created = await createPendingOrder(buyer.id, CHECKOUT_PAYLOAD)
+    const created = await createPendingOrder(buyer.id, CHECKOUT_PAYLOAD, 'simulated')
     expect(created.ok).toBe(true)
     if (!created.ok) return
 
@@ -113,7 +113,7 @@ describe('order lifecycle', () => {
     const listing = await createListing(seller.id, { stock: 2 })
     await addToCart(buyer.id, listing.id)
 
-    const created = await createPendingOrder(buyer.id, CHECKOUT_PAYLOAD)
+    const created = await createPendingOrder(buyer.id, CHECKOUT_PAYLOAD, 'simulated')
     expect(created.ok).toBe(true)
     if (!created.ok) return
     expect(await stockOf(listing.id)).toBe(1)
@@ -183,7 +183,7 @@ describe('order lifecycle', () => {
     const listing = await createListing(seller.id, { stock: 1 })
     await addToCart(buyer.id, listing.id)
 
-    const created = await createPendingOrder(buyer.id, CHECKOUT_PAYLOAD)
+    const created = await createPendingOrder(buyer.id, CHECKOUT_PAYLOAD, 'simulated')
     expect(created.ok).toBe(true)
     if (!created.ok) return
 

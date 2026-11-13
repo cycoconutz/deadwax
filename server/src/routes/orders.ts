@@ -2,14 +2,18 @@ import type { FastifyPluginAsync } from 'fastify'
 import { desc, eq, inArray } from 'drizzle-orm'
 import {
   checkoutSchema,
+  checkoutShippingSchema,
+  type CheckoutInput,
   type OrderDetail,
   type OrderItemPublic,
   type OrderSummary,
 } from '@deadwax/shared'
+import { env } from '../env'
 import { db } from '../db/index'
 import { orderItems, orders, payments, reviews, users } from '../db/schema'
 import { createPendingOrder } from '../lib/checkout'
 import { confirmPayment } from '../lib/payment'
+import { createPaymentIntentForOrder } from '../lib/stripe'
 
 interface OrderRow {
   id: number
@@ -87,7 +91,12 @@ const orderRoutes: FastifyPluginAsync = async (app) => {
     if (!request.user) {
       return reply.status(401).send({ error: 'unauthorized', message: 'Sign in first.' })
     }
-    const parsed = checkoutSchema.safeParse(request.body)
+    const mode = env.PAYMENTS_MODE
+    const parsed =
+      mode === 'stripe'
+        ? checkoutShippingSchema.safeParse(request.body)
+        : checkoutSchema.safeParse(request.body)
+
     if (!parsed.success) {
       return reply.status(400).send({
         error: 'validation_error',
@@ -95,17 +104,22 @@ const orderRoutes: FastifyPluginAsync = async (app) => {
         details: parsed.error.flatten(),
       })
     }
-    const created = await createPendingOrder(request.user.id, parsed.data)
 
-    if (!created.ok) {
-      if (created.reason === 'empty_cart') {
-        return reply.status(400).send({ error: 'empty_cart', message: 'Your cart is empty.' })
-      }
-      if (created.reason === 'payment_declined') {
+    if (mode === 'simulated') {
+      const cardNumber = (parsed.data as CheckoutInput).cardNumber.replace(/[\s-]+/g, '')
+      if (cardNumber.slice(-4) === '0002') {
         return reply.status(402).send({
           error: 'payment_declined',
           message: 'Card declined. This demo rejects any card ending in 0002.',
         })
+      }
+    }
+
+    const created = await createPendingOrder(request.user.id, parsed.data, mode)
+
+    if (!created.ok) {
+      if (created.reason === 'empty_cart') {
+        return reply.status(400).send({ error: 'empty_cart', message: 'Your cart is empty.' })
       }
       return reply.status(409).send({
         error: 'unavailable',
@@ -114,8 +128,24 @@ const orderRoutes: FastifyPluginAsync = async (app) => {
       })
     }
 
-    // Simulated payments clear immediately. A real provider confirms later,
-    // through the same function, so the state machine is identical.
+    if (mode === 'stripe') {
+      try {
+        const intent = await createPaymentIntentForOrder(created.orderId, created.totalCents)
+        return reply
+          .status(201)
+          .send({ orderId: created.orderId, clientSecret: intent.clientSecret })
+      } catch {
+        // The order stays pending and the sweeper releases its stock.
+        request.log.error({ orderId: created.orderId }, 'could not create a payment intent')
+        return reply.status(502).send({
+          error: 'payment_unavailable',
+          message: 'The payment provider is unavailable. Nothing was charged.',
+        })
+      }
+    }
+
+    // Simulated payments clear immediately. With Stripe the webhook confirms
+    // later, through the same function, so the state machine is identical.
     const outcome = await confirmPayment(created.orderId)
     if (outcome !== 'confirmed') {
       request.log.warn({ orderId: created.orderId, outcome }, 'checkout order was not confirmed')

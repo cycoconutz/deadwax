@@ -1,15 +1,18 @@
 import { randomUUID } from 'node:crypto'
 import { and, eq, gte, sql } from 'drizzle-orm'
-import { shippingFlatCents, type CheckoutInput } from '@deadwax/shared'
+import { shippingFlatCents, type CheckoutShippingInput } from '@deadwax/shared'
 import { db } from '../db'
 import { cartItems, listings, orderItems, orders, payments } from '../db/schema'
 
+export type PaymentProvider = 'simulated' | 'stripe'
+
 export type CreateOrderFailure =
   | { ok: false; reason: 'empty_cart' }
-  | { ok: false; reason: 'payment_declined' }
   | { ok: false; reason: 'unavailable'; items: Array<{ listingId: number; title: string }> }
 
-export type CreateOrderResult = { ok: true; orderId: number } | CreateOrderFailure
+export type CreateOrderResult =
+  | { ok: true; orderId: number; totalCents: number }
+  | CreateOrderFailure
 
 /**
  * Thrown when the guarded stock update matches no row: another checkout took
@@ -33,7 +36,8 @@ class StockConflictError extends Error {
  */
 export async function createPendingOrder(
   buyerId: number,
-  checkout: CheckoutInput,
+  shipping: CheckoutShippingInput,
+  provider: PaymentProvider,
 ): Promise<CreateOrderResult> {
   const cartRows = await db
     .select({
@@ -65,12 +69,6 @@ export async function createPendingOrder(
     }
   }
 
-  const cardNumber = checkout.cardNumber.replace(/[\s-]+/g, '')
-  const cardLast4 = cardNumber.slice(-4)
-  if (cardLast4 === '0002') {
-    return { ok: false, reason: 'payment_declined' }
-  }
-
   const subtotalCents = cartRows.reduce((sum, row) => sum + row.priceCents * row.quantity, 0)
   const shippingCents = shippingFlatCents
   const totalCents = subtotalCents + shippingCents
@@ -86,13 +84,13 @@ export async function createPendingOrder(
           subtotalCents,
           shippingCents,
           totalCents,
-          shippingName: checkout.shippingName,
-          shippingAddress1: checkout.shippingAddress1,
-          shippingAddress2: checkout.shippingAddress2 ?? '',
-          shippingCity: checkout.shippingCity,
-          shippingRegion: checkout.shippingRegion ?? '',
-          shippingPostal: checkout.shippingPostal,
-          shippingCountry: checkout.shippingCountry,
+          shippingName: shipping.shippingName,
+          shippingAddress1: shipping.shippingAddress1,
+          shippingAddress2: shipping.shippingAddress2 ?? '',
+          shippingCity: shipping.shippingCity,
+          shippingRegion: shipping.shippingRegion ?? '',
+          shippingPostal: shipping.shippingPostal,
+          shippingCountry: shipping.shippingCountry,
         })
         .returning({ id: orders.id })
 
@@ -114,11 +112,11 @@ export async function createPendingOrder(
 
       await tx.insert(payments).values({
         orderId: order.id,
-        provider: 'simulated',
-        providerRef: `sim_${randomUUID()}`,
+        provider,
+        providerRef: `${provider === 'simulated' ? 'sim' : 'stripe_pending'}_${randomUUID()}`,
         status: 'requires_payment',
         amountCents: totalCents,
-        cardLast4,
+        cardLast4: '',
       })
 
       // Claim the stock with a conditional update instead of writing the
@@ -148,7 +146,7 @@ export async function createPendingOrder(
       return order.id
     })
 
-    return { ok: true, orderId }
+    return { ok: true, orderId, totalCents }
   } catch (error) {
     if (error instanceof StockConflictError) {
       return {

@@ -126,7 +126,7 @@ export type CartItemInput = z.infer<typeof cartItemSchema>
 
 /* ---------------------------- checkout ---------------------------- */
 
-export const checkoutSchema = z.object({
+export const checkoutShippingSchema = z.object({
   shippingName: z.string().trim().min(1).max(120),
   shippingAddress1: z.string().trim().min(1).max(160),
   shippingAddress2: z.string().trim().max(160).optional().or(z.literal('')),
@@ -134,6 +134,14 @@ export const checkoutSchema = z.object({
   shippingRegion: z.string().trim().max(80).optional().or(z.literal('')),
   shippingPostal: z.string().trim().min(1).max(20),
   shippingCountry: z.string().trim().min(2).max(60),
+})
+export type CheckoutShippingInput = z.infer<typeof checkoutShippingSchema>
+
+/**
+ * The simulated provider reads the card in the demo form. Stripe never sends
+ * card data to this server at all: Elements posts straight to Stripe.
+ */
+export const checkoutSchema = checkoutShippingSchema.extend({
   cardNumber: z.string().trim().min(12).max(23),
   cardExpiry: z.string().trim().min(4).max(7),
   cardCvc: z.string().trim().min(3).max(4),

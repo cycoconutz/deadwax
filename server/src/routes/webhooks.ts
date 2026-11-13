@@ -28,11 +28,13 @@ const webhookRoutes: FastifyPluginAsync = async (app) => {
     }
   })
 
+  app.get('/payments/config', async () => ({ mode: env.PAYMENTS_MODE }))
+
   app.post('/webhooks/stripe', async (request, reply) => {
-    if (env.PAYMENTS_MODE !== 'stripe') {
+    if (!env.STRIPE_SECRET_KEY) {
       return reply.status(503).send({
-        error: 'stripe_disabled',
-        message: 'Stripe webhooks are disabled while PAYMENTS_MODE is simulated.',
+        error: 'stripe_not_configured',
+        message: 'Stripe is not configured for this deployment.',
       })
     }
 
@@ -112,12 +114,12 @@ const webhookRoutes: FastifyPluginAsync = async (app) => {
     return reply.status(200).send({ received: true, ...result })
   })
 
-  // Fail at boot rather than at the first payment when the mode is on but the
-  // keys are not.
-  if (env.PAYMENTS_MODE === 'stripe') {
+  // Fail at boot rather than at the first payment when Stripe is configured
+  // but the signing secret is still the development placeholder.
+  if (env.STRIPE_SECRET_KEY) {
     getStripe()
     if (isProd && env.PAYMENT_WEBHOOK_SECRET === 'dev-webhook-secret') {
-      throw new Error('PAYMENT_WEBHOOK_SECRET must be set when PAYMENTS_MODE=stripe')
+      throw new Error('PAYMENT_WEBHOOK_SECRET must be set once Stripe is configured')
     }
   }
 }
