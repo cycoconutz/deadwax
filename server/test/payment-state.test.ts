@@ -2,10 +2,11 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { FastifyInstance } from 'fastify'
 import { and, eq, inArray } from 'drizzle-orm'
 import { db } from '../src/db'
-import { cartItems, listings, orderItems, orders, payments } from '../src/db/schema'
+import { listings, orderItems, orders, payments } from '../src/db/schema'
 import { createPendingOrder } from '../src/lib/checkout'
 import { confirmPayment, expireStaleOrders, PAYMENT_TTL_MS } from '../src/lib/payment'
 import {
+  addToCart,
   authHeaders,
   CHECKOUT_PAYLOAD,
   createListing,
@@ -27,14 +28,6 @@ afterAll(async () => {
 beforeEach(async () => {
   await resetDb()
 })
-
-async function cartWith(
-  buyerId: number,
-  listingId: number,
-  quantity = 1,
-): Promise<void> {
-  await db.insert(cartItems).values({ userId: buyerId, listingId, quantity })
-}
 
 async function orderRow(orderId: number) {
   const rows = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1)
@@ -64,7 +57,7 @@ describe('order lifecycle', () => {
     const seller = await createUser('seller@example.com', { role: 'seller' })
     const buyer = await createUser('buyer@example.com')
     const listing = await createListing(seller.id, { stock: 1, priceCents: 2499 })
-    await cartWith(buyer.id, listing.id)
+    await addToCart(buyer.id, listing.id)
 
     const created = await createPendingOrder(buyer.id, CHECKOUT_PAYLOAD)
     expect(created.ok).toBe(true)
@@ -90,7 +83,7 @@ describe('order lifecycle', () => {
     const seller = await createUser('seller@example.com', { role: 'seller' })
     const buyer = await createUser('buyer@example.com')
     const listing = await createListing(seller.id, { stock: 1 })
-    await cartWith(buyer.id, listing.id)
+    await addToCart(buyer.id, listing.id)
 
     const created = await createPendingOrder(buyer.id, CHECKOUT_PAYLOAD)
     expect(created.ok).toBe(true)
@@ -118,7 +111,7 @@ describe('order lifecycle', () => {
     const seller = await createUser('seller@example.com', { role: 'seller' })
     const buyer = await createUser('buyer@example.com')
     const listing = await createListing(seller.id, { stock: 2 })
-    await cartWith(buyer.id, listing.id)
+    await addToCart(buyer.id, listing.id)
 
     const created = await createPendingOrder(buyer.id, CHECKOUT_PAYLOAD)
     expect(created.ok).toBe(true)
@@ -150,7 +143,7 @@ describe('order lifecycle', () => {
     const seller = await createUser('seller@example.com', { role: 'seller' })
     const buyer = await createUser('buyer@example.com')
     const listing = await createListing(seller.id, { stock: 1 })
-    await cartWith(buyer.id, listing.id)
+    await addToCart(buyer.id, listing.id)
 
     const response = await app.inject({
       method: 'POST',
@@ -188,7 +181,7 @@ describe('order lifecycle', () => {
     const seller = await createUser('seller@example.com', { role: 'seller' })
     const buyer = await createUser('buyer@example.com')
     const listing = await createListing(seller.id, { stock: 1 })
-    await cartWith(buyer.id, listing.id)
+    await addToCart(buyer.id, listing.id)
 
     const created = await createPendingOrder(buyer.id, CHECKOUT_PAYLOAD)
     expect(created.ok).toBe(true)

@@ -18,6 +18,8 @@ export function applyTestEnv(): void {
   process.env.DATABASE_URL = TEST_DATABASE_URL
   process.env.SESSION_SECRET = 'test-session-secret-at-least-32-chars'
   process.env.PAYMENT_WEBHOOK_SECRET = 'whsec_test_only'
+  process.env.PAYMENTS_MODE = 'stripe'
+  process.env.STRIPE_SECRET_KEY = 'rkcs_test_unit_test_key'
   process.env.CLIENT_ORIGIN = 'http://localhost:5173'
   // The sweeper is exercised directly in tests, never on a timer.
   process.env.ORDER_SWEEP_INTERVAL_MS = '0'

@@ -2,7 +2,7 @@ import type { FastifyInstance, LightMyRequestResponse } from 'fastify'
 import { sql } from 'drizzle-orm'
 import { buildApp } from '../src/app'
 import { db } from '../src/db'
-import { listings, users } from '../src/db/schema'
+import { cartItems, listings, users } from '../src/db/schema'
 import { hashPassword } from '../src/lib/password'
 import { createSession, SESSION_COOKIE } from '../src/lib/session'
 
@@ -14,6 +14,7 @@ export async function makeApp(): Promise<FastifyInstance> {
 
 const TRUNCATE = sql`
   truncate table
+    webhook_events,
     reviews,
     payments,
     order_items,
@@ -138,6 +139,14 @@ export async function createUser(
 
   const { token } = await createSession(row.id)
   return { ...row, cookie: `${SESSION_COOKIE}=${token}` }
+}
+
+export async function addToCart(
+  userId: number,
+  listingId: number,
+  quantity = 1,
+): Promise<void> {
+  await db.insert(cartItems).values({ userId, listingId, quantity })
 }
 
 export interface ListingOverrides {

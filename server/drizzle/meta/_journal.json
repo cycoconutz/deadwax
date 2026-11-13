@@ -36,6 +36,13 @@
       "when": 1794521228995,
       "tag": "0004_typical_snowbird",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794586260460,
+      "tag": "0005_calm_doomsday",
+      "breakpoints": true
     }
   ]
 }

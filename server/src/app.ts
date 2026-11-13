@@ -15,6 +15,7 @@ import listingRoutes from './routes/listings'
 import orderRoutes from './routes/orders'
 import reviewRoutes from './routes/reviews'
 import sellerRoutes from './routes/seller'
+import webhookRoutes from './routes/webhooks'
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -61,6 +62,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   await app.register(sellerRoutes, { prefix: '/api' })
   await app.register(reviewRoutes, { prefix: '/api' })
   await app.register(adminRoutes, { prefix: '/api' })
+  await app.register(webhookRoutes, { prefix: '/api' })
 
   if (env.ORDER_SWEEP_INTERVAL_MS > 0) {
     const sweep = (): void => {

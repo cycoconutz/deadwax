@@ -16,68 +16,77 @@ export interface ConfirmPaymentInput {
   cardLast4?: string
 }
 
+/** A handle inside an open transaction, so callers can compose work with it. */
+export type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
+
 /**
  * The only path from pending to paid. Payment row, order and line items move
  * in one transaction, so a half-paid order cannot exist. Calling it twice is
  * safe and reports `already_paid`.
+ *
+ * Takes a transaction so a webhook can record the event that caused the change
+ * in the same commit. Either both land or neither does.
  */
-export async function confirmPayment(
+export async function confirmPaymentInTx(
+  tx: Transaction,
   orderId: number,
   input: ConfirmPaymentInput = {},
 ): Promise<ConfirmOutcome> {
   const now = new Date()
 
-  return db.transaction(async (tx) => {
-    const orderRows = await tx
-      .select({ id: orders.id, status: orders.status })
-      .from(orders)
-      .where(eq(orders.id, orderId))
-      .for('update')
+  const orderRows = await tx
+    .select({ id: orders.id, status: orders.status })
+    .from(orders)
+    .where(eq(orders.id, orderId))
+    .for('update')
 
-    const order = orderRows[0]
-    if (!order) return 'not_found'
-    if (order.status === 'cancelled') return 'cancelled'
-    if (order.status !== 'pending') return 'already_paid'
+  const order = orderRows[0]
+  if (!order) return 'not_found'
+  if (order.status === 'cancelled') return 'cancelled'
+  if (order.status !== 'pending') return 'already_paid'
 
-    const paymentRows = await tx
-      .select({
-        id: payments.id,
-        providerRef: payments.providerRef,
-        cardLast4: payments.cardLast4,
-      })
-      .from(payments)
-      .where(eq(payments.orderId, orderId))
-      .orderBy(desc(payments.createdAt))
-      .limit(1)
+  const paymentRows = await tx
+    .select({
+      id: payments.id,
+      providerRef: payments.providerRef,
+      cardLast4: payments.cardLast4,
+    })
+    .from(payments)
+    .where(eq(payments.orderId, orderId))
+    .orderBy(desc(payments.createdAt))
+    .limit(1)
 
-    const payment = paymentRows[0]
-    if (!payment) {
-      throw new Error(`Order ${orderId} has no payment record to confirm`)
-    }
+  const payment = paymentRows[0]
+  if (!payment) {
+    throw new Error(`Order ${orderId} has no payment record to confirm`)
+  }
 
-    await tx
-      .update(payments)
-      .set({
-        status: 'succeeded',
-        providerRef: input.providerRef ?? payment.providerRef,
-        cardLast4: input.cardLast4 ?? payment.cardLast4,
-        failureReason: null,
-        updatedAt: now,
-      })
-      .where(eq(payments.id, payment.id))
+  await tx
+    .update(payments)
+    .set({
+      status: 'succeeded',
+      providerRef: input.providerRef ?? payment.providerRef,
+      cardLast4: input.cardLast4 ?? payment.cardLast4,
+      failureReason: null,
+      updatedAt: now,
+    })
+    .where(eq(payments.id, payment.id))
 
-    await tx
-      .update(orders)
-      .set({ status: 'paid', paidAt: now, updatedAt: now })
-      .where(eq(orders.id, orderId))
+  await tx
+    .update(orders)
+    .set({ status: 'paid', paidAt: now, updatedAt: now })
+    .where(eq(orders.id, orderId))
 
-    await tx
-      .update(orderItems)
-      .set({ status: 'paid' })
-      .where(eq(orderItems.orderId, orderId))
+  await tx.update(orderItems).set({ status: 'paid' }).where(eq(orderItems.orderId, orderId))
 
-    return 'confirmed'
-  })
+  return 'confirmed'
+}
+
+export async function confirmPayment(
+  orderId: number,
+  input: ConfirmPaymentInput = {},
+): Promise<ConfirmOutcome> {
+  return db.transaction((tx) => confirmPaymentInTx(tx, orderId, input))
 }
 
 /**

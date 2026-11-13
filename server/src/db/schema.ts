@@ -2,6 +2,7 @@ import {
   check,
   index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   serial,
@@ -194,5 +195,22 @@ export const reviews = pgTable(
   (t) => [
     uniqueIndex('reviews_order_item_unique').on(t.orderItemId),
     index('reviews_listing_idx').on(t.listingId),
+  ],
+)
+
+export const webhookEvents = pgTable(
+  'webhook_events',
+  {
+    id: serial('id').primaryKey(),
+    provider: varchar('provider', { length: 40 }).notNull(),
+    providerEventId: varchar('provider_event_id', { length: 120 }).notNull(),
+    type: varchar('type', { length: 120 }).notNull(),
+    payload: jsonb('payload').notNull(),
+    receivedAt: timestamp('received_at', { withTimezone: true }).defaultNow().notNull(),
+    processedAt: timestamp('processed_at', { withTimezone: true }),
+    outcome: varchar('outcome', { length: 40 }),
+  },
+  (t) => [
+    uniqueIndex('webhook_events_provider_event_unique').on(t.provider, t.providerEventId),
   ],
 )

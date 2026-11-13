@@ -25,6 +25,10 @@ const envSchema = z.object({
   SESSION_SECRET: z.string().min(16).default('dev-only-change-me-please-32-chars-min'),
   CLIENT_ORIGIN: z.string().default('http://localhost:5173'),
   PAYMENT_WEBHOOK_SECRET: z.string().default('dev-webhook-secret'),
+  // simulated clears a payment inside the checkout request. stripe waits for
+  // the provider's webhook, which is the path the live demo uses.
+  PAYMENTS_MODE: z.enum(['simulated', 'stripe']).default('simulated'),
+  STRIPE_SECRET_KEY: z.string().default(''),
   // How often the payment sweeper looks for abandoned orders. 0 disables the
   // timer, which is what the test suite uses so the suite stays deterministic.
   ORDER_SWEEP_INTERVAL_MS: z.coerce.number().int().min(0).default(300_000),
