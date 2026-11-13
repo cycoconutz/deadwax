@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { and, asc, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm'
 import type { AdminReview, AdminSummary, AdminUser, ListingSummary } from '@deadwax/shared'
 import { db } from '../db/index'
-import { listings, mailOutbox, orders, outbox, reviews, users } from '../db/schema'
+import { listings, mailOutbox, orders, outbox, reviews, users, webhookEvents } from '../db/schema'
 
 const adminRoutes: FastifyPluginAsync = async (app) => {
   app.addHook('onRequest', async (request, reply) => {
@@ -11,6 +11,25 @@ const adminRoutes: FastifyPluginAsync = async (app) => {
     }
     if (request.user.role !== 'admin') {
       return reply.status(403).send({ error: 'forbidden', message: 'Admins only.' })
+    }
+  })
+
+  app.get('/admin/webhooks', async () => {
+    const rows = await db
+      .select()
+      .from(webhookEvents)
+      .orderBy(desc(webhookEvents.id))
+      .limit(20)
+
+    return {
+      data: rows.map((row) => ({
+        id: row.id,
+        eventId: row.providerEventId,
+        type: row.type,
+        outcome: row.outcome,
+        receivedAt: row.receivedAt.toISOString(),
+        processedAt: row.processedAt?.toISOString() ?? null,
+      })),
     }
   })
 
