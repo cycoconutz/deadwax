@@ -4,6 +4,8 @@ import { db, client } from './index'
 async function main() {
   await db.execute(sql`
     truncate table
+      mail_outbox,
+      outbox,
       webhook_events,
       reviews,
       payments,

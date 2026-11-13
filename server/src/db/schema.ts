@@ -198,8 +198,7 @@ export const reviews = pgTable(
   ],
 )
 
-export const webhookEvents = pgTable(
-  'webhook_events',
+export const webhookEvents = pgTable(  'webhook_events',
   {
     id: serial('id').primaryKey(),
     provider: varchar('provider', { length: 40 }).notNull(),
@@ -213,4 +212,39 @@ export const webhookEvents = pgTable(
   (t) => [
     uniqueIndex('webhook_events_provider_event_unique').on(t.provider, t.providerEventId),
   ],
+)
+
+export const outbox = pgTable(
+  'outbox',
+  {
+    id: serial('id').primaryKey(),
+    kind: varchar('kind', { length: 60 }).notNull(),
+    payload: jsonb('payload').notNull(),
+    attempts: integer('attempts').notNull().default(0),
+    nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true }).defaultNow().notNull(),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+    deadLetteredAt: timestamp('dead_lettered_at', { withTimezone: true }),
+    lastError: text('last_error'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index('outbox_due_idx').on(t.nextAttemptAt)],
+)
+
+/**
+ * Where a delivery lands. A real provider would be an HTTP call; this keeps
+ * the message so the demo can show exactly what would have been sent.
+ */
+export const mailOutbox = pgTable(
+  'mail_outbox',
+  {
+    id: serial('id').primaryKey(),
+    outboxId: integer('outbox_id')
+      .notNull()
+      .references(() => outbox.id, { onDelete: 'cascade' }),
+    recipient: varchar('recipient', { length: 254 }).notNull(),
+    subject: varchar('subject', { length: 200 }).notNull(),
+    body: text('body').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex('mail_outbox_outbox_unique').on(t.outboxId)],
 )

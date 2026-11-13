@@ -43,6 +43,13 @@
       "when": 1794586260460,
       "tag": "0005_calm_doomsday",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794589447656,
+      "tag": "0006_known_leo",
+      "breakpoints": true
     }
   ]
 }

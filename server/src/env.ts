@@ -32,6 +32,8 @@ const envSchema = z.object({
   // How often the payment sweeper looks for abandoned orders. 0 disables the
   // timer, which is what the test suite uses so the suite stays deterministic.
   ORDER_SWEEP_INTERVAL_MS: z.coerce.number().int().min(0).default(300_000),
+  // How often the outbox worker looks for messages to deliver. 0 disables it.
+  OUTBOX_INTERVAL_MS: z.coerce.number().int().min(0).default(10_000),
 })
 
 export const env = envSchema.parse(process.env)

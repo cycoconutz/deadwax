@@ -7,6 +7,7 @@ import fastifyStatic from '@fastify/static'
 import { env, isProd } from './env'
 import { getSessionUser, SESSION_COOKIE, type SessionUser } from './lib/session'
 import { expireStaleOrders } from './lib/payment'
+import { drainOutbox } from './lib/outbox'
 import authRoutes from './routes/auth'
 import adminRoutes from './routes/admin'
 import cartRoutes from './routes/cart'
@@ -81,6 +82,27 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     // case this protects against.
     sweep()
     const timer = setInterval(sweep, env.ORDER_SWEEP_INTERVAL_MS)
+    timer.unref()
+    app.addHook('onClose', async () => {
+      clearInterval(timer)
+    })
+  }
+
+  if (env.OUTBOX_INTERVAL_MS > 0) {
+    const drain = (): void => {
+      drainOutbox()
+        .then((result) => {
+          if (result.sent > 0 || result.failed > 0) {
+            app.log.info(result, 'outbox drained')
+          }
+        })
+        .catch((error: unknown) => {
+          app.log.error(error, 'outbox drain failed')
+        })
+    }
+
+    drain()
+    const timer = setInterval(drain, env.OUTBOX_INTERVAL_MS)
     timer.unref()
     app.addHook('onClose', async () => {
       clearInterval(timer)

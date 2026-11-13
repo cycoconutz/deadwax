@@ -1,6 +1,7 @@
 import { and, desc, eq, lt, sql } from 'drizzle-orm'
 import { db } from '../db'
 import { listings, orderItems, orders, payments } from '../db/schema'
+import { enqueueOrderMessages } from './outbox'
 
 /**
  * How long a buyer has to finish paying before the reservation is released.
@@ -78,6 +79,11 @@ export async function confirmPaymentInTx(
     .where(eq(orders.id, orderId))
 
   await tx.update(orderItems).set({ status: 'paid' }).where(eq(orderItems.orderId, orderId))
+
+  // Transactional outbox: the messages commit with the payment, so a receipt
+  // can never exist for an order that was not paid, or go missing for one
+  // that was.
+  await enqueueOrderMessages(tx, orderId)
 
   return 'confirmed'
 }

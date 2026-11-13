@@ -21,6 +21,7 @@ export function applyTestEnv(): void {
   process.env.PAYMENTS_MODE = 'simulated'
   process.env.STRIPE_SECRET_KEY = 'rkcs_test_unit_test_key'
   process.env.CLIENT_ORIGIN = 'http://localhost:5173'
-  // The sweeper is exercised directly in tests, never on a timer.
+  // Timers are exercised directly in tests, never on a clock.
   process.env.ORDER_SWEEP_INTERVAL_MS = '0'
+  process.env.OUTBOX_INTERVAL_MS = '0'
 }

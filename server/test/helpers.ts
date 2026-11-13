@@ -14,6 +14,8 @@ export async function makeApp(): Promise<FastifyInstance> {
 
 const TRUNCATE = sql`
   truncate table
+    mail_outbox,
+    outbox,
     webhook_events,
     reviews,
     payments,
