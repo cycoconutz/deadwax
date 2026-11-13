@@ -3,6 +3,7 @@ import { formatPrice } from '@deadwax/shared'
 import { db } from '../db'
 import { mailOutbox, orderItems, orders, outbox, users } from '../db/schema'
 import type { Transaction } from './payment'
+import { withSpan } from './tracing'
 
 export const MAX_ATTEMPTS = 5
 const BACKOFF_BASE_MS = 5_000
@@ -175,38 +176,41 @@ export async function drainOutbox(
           .onConflictDoNothing()
       })
 
-    let sent = 0
-    let failed = 0
-    let dead = 0
+    return withSpan('outbox.drain', { 'outbox.batch': due.length }, async (span) => {
+      let sent = 0
+      let failed = 0
+      let dead = 0
 
-    for (const job of due) {
-      const payload = job.payload as OutboxPayload
-      try {
-        await sender(payload, job.id)
-        await tx
-          .update(outbox)
-          .set({ sentAt: now, attempts: job.attempts + 1, lastError: null })
-          .where(eq(outbox.id, job.id))
-        sent += 1
-      } catch (error) {
-        const attempts = job.attempts + 1
-        const isDead = attempts >= MAX_ATTEMPTS
-        await tx
-          .update(outbox)
-          .set({
-            attempts,
-            lastError: error instanceof Error ? error.message : 'unknown error',
-            deadLetteredAt: isDead ? now : null,
-            nextAttemptAt: isDead
-              ? job.nextAttemptAt
-              : new Date(now.getTime() + BACKOFF_BASE_MS * 2 ** (attempts - 1)),
-          })
-          .where(eq(outbox.id, job.id))
-        failed += 1
-        if (isDead) dead += 1
+      for (const job of due) {
+        const payload = job.payload as OutboxPayload
+        try {
+          await sender(payload, job.id)
+          await tx
+            .update(outbox)
+            .set({ sentAt: now, attempts: job.attempts + 1, lastError: null })
+            .where(eq(outbox.id, job.id))
+          sent += 1
+        } catch (error) {
+          const attempts = job.attempts + 1
+          const isDead = attempts >= MAX_ATTEMPTS
+          await tx
+            .update(outbox)
+            .set({
+              attempts,
+              lastError: error instanceof Error ? error.message : 'unknown error',
+              deadLetteredAt: isDead ? now : null,
+              nextAttemptAt: isDead
+                ? job.nextAttemptAt
+                : new Date(now.getTime() + BACKOFF_BASE_MS * 2 ** (attempts - 1)),
+            })
+            .where(eq(outbox.id, job.id))
+          failed += 1
+          if (isDead) dead += 1
+        }
       }
-    }
 
-    return { sent, failed, dead }
+      span.setAttributes({ 'outbox.sent': sent, 'outbox.failed': failed, 'outbox.dead': dead })
+      return { sent, failed, dead }
+    })
   })
 }

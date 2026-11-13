@@ -34,6 +34,9 @@ const envSchema = z.object({
   ORDER_SWEEP_INTERVAL_MS: z.coerce.number().int().min(0).default(300_000),
   // How often the outbox worker looks for messages to deliver. 0 disables it.
   OUTBOX_INTERVAL_MS: z.coerce.number().int().min(0).default(10_000),
+  // Tracing is off unless an OTLP endpoint is configured.
+  OTEL_EXPORTER_OTLP_ENDPOINT: z.string().default(''),
+  OTEL_SERVICE_NAME: z.string().default('deadwax'),
 })
 
 export const env = envSchema.parse(process.env)

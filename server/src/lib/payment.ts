@@ -2,6 +2,7 @@ import { and, desc, eq, lt, sql } from 'drizzle-orm'
 import { db } from '../db'
 import { listings, orderItems, orders, payments } from '../db/schema'
 import { enqueueOrderMessages } from './outbox'
+import { withSpan } from './tracing'
 
 /**
  * How long a buyer has to finish paying before the reservation is released.
@@ -32,6 +33,18 @@ export async function confirmPaymentInTx(
   tx: Transaction,
   orderId: number,
   input: ConfirmPaymentInput = {},
+): Promise<ConfirmOutcome> {
+  return withSpan('payment.confirm', { 'order.id': orderId }, async (span) => {
+    const outcome = await confirmPaymentBody(tx, orderId, input)
+    span.setAttribute('payment.outcome', outcome)
+    return outcome
+  })
+}
+
+async function confirmPaymentBody(
+  tx: Transaction,
+  orderId: number,
+  input: ConfirmPaymentInput,
 ): Promise<ConfirmOutcome> {
   const now = new Date()
 

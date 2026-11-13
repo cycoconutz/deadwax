@@ -8,6 +8,7 @@ import { env, isProd } from './env'
 import { getSessionUser, SESSION_COOKIE, type SessionUser } from './lib/session'
 import { expireStaleOrders } from './lib/payment'
 import { drainOutbox } from './lib/outbox'
+import { withTraceContext } from './lib/tracing'
 import authRoutes from './routes/auth'
 import adminRoutes from './routes/admin'
 import cartRoutes from './routes/cart'
@@ -39,7 +40,13 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   const clientDist = clientDistCandidates.find((candidate) => existsSync(candidate))
 
   const app = Fastify({
-    logger: options.logger ?? (isProd ? true : { level: 'info', transport: { target: 'pino-pretty' } }),
+    logger: options.logger ?? {
+      level: 'info',
+      ...(isProd ? {} : { transport: { target: 'pino-pretty' } }),
+      formatters: {
+        log: withTraceContext,
+      },
+    },
     trustProxy: true,
   })
 

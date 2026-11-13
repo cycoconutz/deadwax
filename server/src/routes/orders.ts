@@ -14,6 +14,7 @@ import { orderItems, orders, payments, reviews, users } from '../db/schema'
 import { createPendingOrder } from '../lib/checkout'
 import { confirmPayment } from '../lib/payment'
 import { createPaymentIntentForOrder } from '../lib/stripe'
+import { validTraceId, withSpan } from '../lib/tracing'
 
 interface OrderRow {
   id: number
@@ -91,6 +92,7 @@ const orderRoutes: FastifyPluginAsync = async (app) => {
     if (!request.user) {
       return reply.status(401).send({ error: 'unauthorized', message: 'Sign in first.' })
     }
+    const buyerId = request.user.id
     const mode = env.PAYMENTS_MODE
     const parsed =
       mode === 'stripe'
@@ -115,43 +117,76 @@ const orderRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
-    const created = await createPendingOrder(request.user.id, parsed.data, mode)
+    // One span covers the whole request: order creation, the stock claim and
+    // whichever confirmation path this deployment uses. Every outcome returns
+    // through it, so a failed checkout is traceable too.
+    let traceId = ''
+    const result = await withSpan(
+      'checkout',
+      { 'payment.mode': mode, 'buyer.id': buyerId },
+      async (span) => {
+        traceId = span.spanContext().traceId
 
-    if (!created.ok) {
-      if (created.reason === 'empty_cart') {
-        return reply.status(400).send({ error: 'empty_cart', message: 'Your cart is empty.' })
-      }
-      return reply.status(409).send({
-        error: 'unavailable',
-        message: 'Some records are no longer available in that quantity.',
-        details: created.items,
-      })
-    }
+        const created = await createPendingOrder(buyerId, parsed.data, mode)
 
-    if (mode === 'stripe') {
-      try {
-        const intent = await createPaymentIntentForOrder(created.orderId, created.totalCents)
-        return reply
-          .status(201)
-          .send({ orderId: created.orderId, clientSecret: intent.clientSecret })
-      } catch {
-        // The order stays pending and the sweeper releases its stock.
-        request.log.error({ orderId: created.orderId }, 'could not create a payment intent')
-        return reply.status(502).send({
-          error: 'payment_unavailable',
-          message: 'The payment provider is unavailable. Nothing was charged.',
-        })
-      }
-    }
+        if (!created.ok) {
+          if (created.reason === 'empty_cart') {
+            return {
+              status: 400,
+              body: { error: 'empty_cart', message: 'Your cart is empty.' },
+            }
+          }
+          return {
+            status: 409,
+            body: {
+              error: 'unavailable',
+              message: 'Some records are no longer available in that quantity.',
+              details: created.items,
+            },
+          }
+        }
 
-    // Simulated payments clear immediately. With Stripe the webhook confirms
-    // later, through the same function, so the state machine is identical.
-    const outcome = await confirmPayment(created.orderId)
-    if (outcome !== 'confirmed') {
-      request.log.warn({ orderId: created.orderId, outcome }, 'checkout order was not confirmed')
-    }
+        span.setAttribute('order.id', created.orderId)
 
-    return reply.status(201).send({ orderId: created.orderId })
+        if (mode === 'stripe') {
+          try {
+            const intent = await createPaymentIntentForOrder(created.orderId, created.totalCents)
+            return {
+              status: 201,
+              body: { orderId: created.orderId, clientSecret: intent.clientSecret },
+            }
+          } catch {
+            // The order stays pending and the sweeper releases its stock.
+            request.log.error({ orderId: created.orderId }, 'could not create a payment intent')
+            return {
+              status: 502,
+              body: {
+                error: 'payment_unavailable',
+                message: 'The payment provider is unavailable. Nothing was charged.',
+              },
+            }
+          }
+        }
+
+        // Simulated payments clear immediately. With Stripe the webhook
+        // confirms later, through the same function, so the state machine is
+        // identical.
+        const confirmed = await confirmPayment(created.orderId)
+        if (confirmed !== 'confirmed') {
+          request.log.warn(
+            { orderId: created.orderId, outcome: confirmed },
+            'checkout order was not confirmed',
+          )
+        }
+        span.setAttribute('payment.outcome', confirmed)
+
+        return { status: 201, body: { orderId: created.orderId } }
+      },
+    )
+
+    const headerTraceId = validTraceId(traceId)
+    if (headerTraceId) reply.header('x-trace-id', headerTraceId)
+    return reply.status(result.status).send(result.body)
   })
 
   app.get('/orders', async (request, reply) => {

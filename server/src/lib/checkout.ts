@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { and, eq, gte, sql } from 'drizzle-orm'
 import { shippingFlatCents, type CheckoutShippingInput } from '@deadwax/shared'
 import { db } from '../db'
+import { withSpan } from './tracing'
 import { cartItems, listings, orderItems, orders, payments } from '../db/schema'
 
 export type PaymentProvider = 'simulated' | 'stripe'
@@ -124,23 +125,26 @@ export async function createPendingOrder(
       // row matches, the whole transaction rolls back, and the buyer is told
       // the record is gone. A blind decrement would drive stock negative and
       // sell the same copy twice.
-      for (const row of cartRows) {
-        const claimed = await tx
-          .update(listings)
-          .set({ stock: sql`${listings.stock} - ${row.quantity}`, updatedAt: new Date() })
-          .where(
-            and(
-              eq(listings.id, row.listingId),
-              eq(listings.status, 'active'),
-              gte(listings.stock, row.quantity),
-            ),
-          )
-          .returning({ id: listings.id })
+      await withSpan('stock.claim', { 'stock.items': cartRows.length }, async (span) => {
+        for (const row of cartRows) {
+          const claimed = await tx
+            .update(listings)
+            .set({ stock: sql`${listings.stock} - ${row.quantity}`, updatedAt: new Date() })
+            .where(
+              and(
+                eq(listings.id, row.listingId),
+                eq(listings.status, 'active'),
+                gte(listings.stock, row.quantity),
+              ),
+            )
+            .returning({ id: listings.id })
 
-        if (claimed.length === 0) {
-          throw new StockConflictError(row.listingId, row.title)
+          if (claimed.length === 0) {
+            throw new StockConflictError(row.listingId, row.title)
+          }
         }
-      }
+        span.setAttribute('stock.claimed', cartRows.length)
+      })
 
       await tx.delete(cartItems).where(eq(cartItems.userId, buyerId))
       return order.id

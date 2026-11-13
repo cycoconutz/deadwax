@@ -1,5 +1,10 @@
-import { buildApp } from './app'
+import { startTracing } from './lib/tracing'
 import { env, isProd } from './env'
+
+// Tracing must start before Fastify is loaded so the instrumentation can patch
+// it, which is why the app is imported dynamically.
+const shutdownTracing = await startTracing()
+const { buildApp } = await import('./app')
 
 const app = await buildApp()
 
@@ -11,5 +16,12 @@ async function start(): Promise<void> {
     process.exit(1)
   }
 }
+
+process.once('SIGTERM', () => {
+  void app
+    .close()
+    .catch(() => undefined)
+    .finally(() => shutdownTracing().finally(() => process.exit(0)))
+})
 
 await start()

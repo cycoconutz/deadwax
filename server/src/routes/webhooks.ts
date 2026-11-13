@@ -6,6 +6,7 @@ import { db } from '../db/index'
 import { webhookEvents } from '../db/schema'
 import { confirmPaymentInTx } from '../lib/payment'
 import { getStripe } from '../lib/stripe'
+import { withSpan } from '../lib/tracing'
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -66,7 +67,11 @@ const webhookRoutes: FastifyPluginAsync = async (app) => {
     // duplicate of work that never happened.
     let result: { duplicate: boolean; outcome?: string }
     try {
-      result = await db.transaction(async (tx) => {
+      result = await withSpan(
+        'webhook.process',
+        { 'webhook.event_id': event.id, 'webhook.type': event.type },
+        () =>
+          db.transaction(async (tx) => {
         const inserted = await tx
           .insert(webhookEvents)
           .values({
@@ -97,7 +102,8 @@ const webhookRoutes: FastifyPluginAsync = async (app) => {
           .where(eq(webhookEvents.id, row.id))
 
         return { duplicate: false as const, outcome }
-      })
+          }),
+      )
     } catch {
       // Deliberately not logging the error object: database errors embed the
       // row parameters in their message, and the row carries the whole event,
