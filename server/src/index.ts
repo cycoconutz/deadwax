@@ -5,6 +5,13 @@ import { env, isProd } from './env'
 // it, which is why the app is imported dynamically.
 const shutdownTracing = await startTracing()
 const { buildApp } = await import('./app')
+const { runMigrations } = await import('./db/migrate-runner')
+
+// Tests migrate in their own global setup; every other environment applies
+// pending migrations before it starts answering requests.
+if (env.NODE_ENV !== 'test') {
+  await runMigrations()
+}
 
 const app = await buildApp()
 
