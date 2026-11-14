@@ -86,7 +86,7 @@ function Header({ onOpenDemo }: { onOpenDemo: () => void }) {
 }
 
 export default function App() {
-  const { user, isPending, isPending: authPending } = useAuth()
+  const { user, isPending } = useAuth()
   const [open, setOpen] = useState(false)
 
   // Show the demo-accounts intro once per session when a signed-out user lands.

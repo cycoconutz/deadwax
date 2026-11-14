@@ -1,15 +1,20 @@
 import type { FastifyPluginAsync } from 'fastify'
-import { randomUUID } from 'node:crypto'
-import { desc, eq, inArray, sql } from 'drizzle-orm'
+import { desc, eq, inArray } from 'drizzle-orm'
 import {
   checkoutSchema,
-  shippingFlatCents,
+  checkoutShippingSchema,
+  type CheckoutInput,
   type OrderDetail,
   type OrderItemPublic,
   type OrderSummary,
 } from '@deadwax/shared'
+import { env } from '../env'
 import { db } from '../db/index'
-import { cartItems, listings, orderItems, orders, payments, reviews, users } from '../db/schema'
+import { orderItems, orders, payments, reviews, users } from '../db/schema'
+import { createPendingOrder } from '../lib/checkout'
+import { confirmPayment } from '../lib/payment'
+import { createPaymentIntentForOrder } from '../lib/stripe'
+import { validTraceId, withSpan } from '../lib/tracing'
 
 interface OrderRow {
   id: number
@@ -87,7 +92,13 @@ const orderRoutes: FastifyPluginAsync = async (app) => {
     if (!request.user) {
       return reply.status(401).send({ error: 'unauthorized', message: 'Sign in first.' })
     }
-    const parsed = checkoutSchema.safeParse(request.body)
+    const buyerId = request.user.id
+    const mode = env.PAYMENTS_MODE
+    const parsed =
+      mode === 'stripe'
+        ? checkoutShippingSchema.safeParse(request.body)
+        : checkoutSchema.safeParse(request.body)
+
     if (!parsed.success) {
       return reply.status(400).send({
         error: 'validation_error',
@@ -95,107 +106,87 @@ const orderRoutes: FastifyPluginAsync = async (app) => {
         details: parsed.error.flatten(),
       })
     }
-    const input = parsed.data
-    const buyerId = request.user.id
 
-    const cartRows = await db
-      .select({
-        listingId: cartItems.listingId,
-        quantity: cartItems.quantity,
-        priceCents: listings.priceCents,
-        stock: listings.stock,
-        status: listings.status,
-        sellerId: listings.sellerId,
-        title: listings.title,
-        artist: listings.artist,
-      })
-      .from(cartItems)
-      .innerJoin(listings, eq(listings.id, cartItems.listingId))
-      .where(eq(cartItems.userId, buyerId))
-
-    if (cartRows.length === 0) {
-      return reply.status(400).send({ error: 'empty_cart', message: 'Your cart is empty.' })
-    }
-
-    const unavailable = cartRows.filter(
-      (row) => row.status !== 'active' || row.stock < row.quantity,
-    )
-    if (unavailable.length > 0) {
-      return reply.status(409).send({
-        error: 'unavailable',
-        message: 'Some records are no longer available in that quantity.',
-        details: unavailable.map((row) => ({ listingId: row.listingId, title: row.title })),
-      })
-    }
-
-    const subtotalCents = cartRows.reduce((sum, row) => sum + row.priceCents * row.quantity, 0)
-    const shippingCents = shippingFlatCents
-    const totalCents = subtotalCents + shippingCents
-
-    const cardNumber = input.cardNumber.replace(/[\s-]+/g, '')
-    const cardLast4 = cardNumber.slice(-4)
-    if (cardLast4 === '0002') {
-      return reply.status(402).send({
-        error: 'payment_declined',
-        message: 'Card declined. This demo rejects any card ending in 0002.',
-      })
-    }
-
-    const orderId = await db.transaction(async (tx) => {
-      const inserted = await tx
-        .insert(orders)
-        .values({
-          buyerId,
-          status: 'paid',
-          subtotalCents,
-          shippingCents,
-          totalCents,
-          shippingName: input.shippingName,
-          shippingAddress1: input.shippingAddress1,
-          shippingAddress2: input.shippingAddress2 ?? '',
-          shippingCity: input.shippingCity,
-          shippingRegion: input.shippingRegion ?? '',
-          shippingPostal: input.shippingPostal,
-          shippingCountry: input.shippingCountry,
+    if (mode === 'simulated') {
+      const cardNumber = (parsed.data as CheckoutInput).cardNumber.replace(/[\s-]+/g, '')
+      if (cardNumber.slice(-4) === '0002') {
+        return reply.status(402).send({
+          error: 'payment_declined',
+          message: 'Card declined. This demo rejects any card ending in 0002.',
         })
-        .returning({ id: orders.id })
-
-      const order = inserted[0]
-      if (!order) throw new Error('Failed to create order')
-
-      await tx.insert(orderItems).values(
-        cartRows.map((row) => ({
-          orderId: order.id,
-          listingId: row.listingId,
-          sellerId: row.sellerId,
-          titleSnapshot: row.title,
-          artistSnapshot: row.artist,
-          priceCents: row.priceCents,
-          quantity: row.quantity,
-        })),
-      )
-
-      await tx.insert(payments).values({
-        orderId: order.id,
-        provider: 'simulated',
-        providerRef: `sim_${randomUUID()}`,
-        status: 'succeeded',
-        amountCents: totalCents,
-        cardLast4,
-      })
-
-      for (const row of cartRows) {
-        await tx
-          .update(listings)
-          .set({ stock: sql`${listings.stock} - ${row.quantity}`, updatedAt: new Date() })
-          .where(eq(listings.id, row.listingId))
       }
+    }
 
-      await tx.delete(cartItems).where(eq(cartItems.userId, buyerId))
-      return order.id
-    })
+    // One span covers the whole request: order creation, the stock claim and
+    // whichever confirmation path this deployment uses. Every outcome returns
+    // through it, so a failed checkout is traceable too.
+    let traceId = ''
+    const result = await withSpan(
+      'checkout',
+      { 'payment.mode': mode, 'buyer.id': buyerId },
+      async (span) => {
+        traceId = span.spanContext().traceId
 
-    return reply.status(201).send({ orderId })
+        const created = await createPendingOrder(buyerId, parsed.data, mode)
+
+        if (!created.ok) {
+          if (created.reason === 'empty_cart') {
+            return {
+              status: 400,
+              body: { error: 'empty_cart', message: 'Your cart is empty.' },
+            }
+          }
+          return {
+            status: 409,
+            body: {
+              error: 'unavailable',
+              message: 'Some records are no longer available in that quantity.',
+              details: created.items,
+            },
+          }
+        }
+
+        span.setAttribute('order.id', created.orderId)
+
+        if (mode === 'stripe') {
+          try {
+            const intent = await createPaymentIntentForOrder(created.orderId, created.totalCents)
+            return {
+              status: 201,
+              body: { orderId: created.orderId, clientSecret: intent.clientSecret },
+            }
+          } catch {
+            // The order stays pending and the sweeper releases its stock.
+            request.log.error({ orderId: created.orderId }, 'could not create a payment intent')
+            return {
+              status: 502,
+              body: {
+                error: 'payment_unavailable',
+                message: 'The payment provider is unavailable. Nothing was charged.',
+              },
+            }
+          }
+        }
+
+        // Simulated payments clear immediately. With Stripe the webhook
+        // confirms later, through the same function, so the state machine is
+        // identical.
+        const confirmed = await confirmPayment(created.orderId)
+        if (confirmed !== 'confirmed') {
+          request.log.warn(
+            { orderId: created.orderId, outcome: confirmed },
+            'checkout order was not confirmed',
+          )
+        }
+        span.setAttribute('payment.outcome', confirmed)
+
+        return { status: 201, body: { orderId: created.orderId } }
+      },
+    )
+
+    const headerTraceId = validTraceId(traceId)
+    if (headerTraceId) reply.header('x-trace-id', headerTraceId)
+    return reply.status(result.status).send(result.body)
   })
 
   app.get('/orders', async (request, reply) => {

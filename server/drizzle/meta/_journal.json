@@ -22,6 +22,34 @@
       "when": 1789760732944,
       "tag": "0002_order_item_status",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794519784658,
+      "tag": "0003_magenta_grandmaster",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794521228995,
+      "tag": "0004_typical_snowbird",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794586260460,
+      "tag": "0005_calm_doomsday",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794589447656,
+      "tag": "0006_known_leo",
+      "breakpoints": true
     }
   ]
 }

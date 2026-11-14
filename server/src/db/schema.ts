@@ -1,6 +1,8 @@
 import {
+  check,
   index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   serial,
@@ -9,6 +11,7 @@ import {
   uniqueIndex,
   varchar,
 } from 'drizzle-orm/pg-core'
+import { sql } from 'drizzle-orm'
 import {
   CONDITIONS,
   GENRES,
@@ -77,6 +80,7 @@ export const listings = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
+    check('listings_stock_non_negative', sql`${t.stock} >= 0`),
     index('listings_seller_idx').on(t.sellerId),
     index('listings_status_idx').on(t.status),
     index('listings_genre_idx').on(t.genre),
@@ -108,6 +112,12 @@ export const orders = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     status: orderStatusEnum('status').notNull().default('pending').$type<OrderStatus>(),
+    // Set only when a payment is confirmed. An order can move to paid from
+    // nowhere else, which is what makes the two states auditable.
+    paidAt: timestamp('paid_at', { withTimezone: true }),
+    // The moment stock was taken for this order. Cleared when an expired
+    // order releases it back to the listing.
+    stockReservedAt: timestamp('stock_reserved_at', { withTimezone: true }),
     subtotalCents: integer('subtotal_cents').notNull(),
     shippingCents: integer('shipping_cents').notNull(),
     totalCents: integer('total_cents').notNull(),
@@ -186,4 +196,55 @@ export const reviews = pgTable(
     uniqueIndex('reviews_order_item_unique').on(t.orderItemId),
     index('reviews_listing_idx').on(t.listingId),
   ],
+)
+
+export const webhookEvents = pgTable(  'webhook_events',
+  {
+    id: serial('id').primaryKey(),
+    provider: varchar('provider', { length: 40 }).notNull(),
+    providerEventId: varchar('provider_event_id', { length: 120 }).notNull(),
+    type: varchar('type', { length: 120 }).notNull(),
+    payload: jsonb('payload').notNull(),
+    receivedAt: timestamp('received_at', { withTimezone: true }).defaultNow().notNull(),
+    processedAt: timestamp('processed_at', { withTimezone: true }),
+    outcome: varchar('outcome', { length: 40 }),
+  },
+  (t) => [
+    uniqueIndex('webhook_events_provider_event_unique').on(t.provider, t.providerEventId),
+  ],
+)
+
+export const outbox = pgTable(
+  'outbox',
+  {
+    id: serial('id').primaryKey(),
+    kind: varchar('kind', { length: 60 }).notNull(),
+    payload: jsonb('payload').notNull(),
+    attempts: integer('attempts').notNull().default(0),
+    nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true }).defaultNow().notNull(),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+    deadLetteredAt: timestamp('dead_lettered_at', { withTimezone: true }),
+    lastError: text('last_error'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index('outbox_due_idx').on(t.nextAttemptAt)],
+)
+
+/**
+ * Where a delivery lands. A real provider would be an HTTP call; this keeps
+ * the message so the demo can show exactly what would have been sent.
+ */
+export const mailOutbox = pgTable(
+  'mail_outbox',
+  {
+    id: serial('id').primaryKey(),
+    outboxId: integer('outbox_id')
+      .notNull()
+      .references(() => outbox.id, { onDelete: 'cascade' }),
+    recipient: varchar('recipient', { length: 254 }).notNull(),
+    subject: varchar('subject', { length: 200 }).notNull(),
+    body: text('body').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex('mail_outbox_outbox_unique').on(t.outboxId)],
 )

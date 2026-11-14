@@ -1,0 +1,33 @@
+name: Keep alive
+
+# Render's free tier sleeps after fifteen minutes of inactivity, and the first
+# request to a sleeping service took 32.75s to answer. A reviewer who clicks
+# "Visit live demo" during that window sees a spinner, not a portfolio.
+#
+# This runs on the default branch only, which is where scheduled workflows are
+# picked up.
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: keepalive
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    name: wake the demo
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: GET /api/health
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' \
+            --max-time 90 \
+            --retry 2 \
+            --retry-delay 10 \
+            https://deadwax-exee.onrender.com/api/health)
+          echo "health: $code"
+          test "$code" = "200"

@@ -19,11 +19,16 @@ export function useOrder(id: number | undefined) {
   })
 }
 
+export interface CheckoutResult {
+  orderId: number
+  clientSecret?: string
+}
+
 export function useCheckout() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (input: CheckoutInput) =>
-      api<{ orderId: number }>('/checkout', { method: 'POST', body: input }),
+      api<CheckoutResult>('/checkout', { method: 'POST', body: input }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: CART_KEY })
       queryClient.invalidateQueries({ queryKey: ['orders'] })

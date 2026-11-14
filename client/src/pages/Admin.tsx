@@ -2,10 +2,13 @@ import { Link } from 'react-router-dom'
 import { formatPrice, type ListingSummary } from '@deadwax/shared'
 import { useAuth } from '../lib/auth'
 import {
+  useAdminJobs,
   useAdminListings,
+  useAdminMail,
   useAdminReviews,
   useAdminSummary,
   useAdminUsers,
+  useAdminWebhooks,
   useArchiveListing,
   useModerateReview,
 } from '../lib/admin'
@@ -62,6 +65,9 @@ export default function Admin() {
   const users = useAdminUsers(isAdmin)
   const listings = useAdminListings(isAdmin)
   const reviews = useAdminReviews(isAdmin)
+  const webhooks = useAdminWebhooks(isAdmin)
+  const jobs = useAdminJobs(isAdmin)
+  const mail = useAdminMail(isAdmin)
   const moderate = useModerateReview()
 
   if (isPending) {
@@ -91,6 +97,9 @@ export default function Admin() {
   const userList = users.data?.data ?? []
   const listingList = listings.data?.data ?? []
   const reviewList = reviews.data?.data ?? []
+  const webhookList = webhooks.data?.data ?? []
+  const jobList = jobs.data?.recent ?? []
+  const mailList = mail.data?.data ?? []
 
   return (
     <div className="page">
@@ -212,6 +221,124 @@ export default function Admin() {
             </li>
           ))}
         </ul>
+      </section>
+
+      <section className="panel">
+        <h2 className="section-label mono">Webhooks</h2>
+        <p className="mono panel-empty">
+          Accepted Stripe events. A replayed event answers 200 with duplicate:true and never
+          reaches this table, which is the point.
+        </p>
+        {webhooks.isPending && <p className="mono">Loading events…</p>}
+        {webhooks.data && webhookList.length === 0 && (
+          <p className="mono panel-empty">No events yet.</p>
+        )}
+        <div className="table-wrap">
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>Received</th>
+                <th>Type</th>
+                <th>Outcome</th>
+                <th>Event</th>
+              </tr>
+            </thead>
+            <tbody>
+              {webhookList.map((event) => (
+                <tr key={event.id}>
+                  <td className="mono">{new Date(event.receivedAt).toLocaleString()}</td>
+                  <td className="mono">{event.type}</td>
+                  <td>
+                    <span className={`mini-status mono status-${event.outcome ?? 'pending'}`}>
+                      {event.outcome ?? 'pending'}
+                    </span>
+                  </td>
+                  <td className="mono admin-sub">{event.eventId}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="panel">
+        <h2 className="section-label mono">Jobs</h2>
+        <div className="stat-grid">
+          <div className="stat">
+            <span className="mono">Pending</span>
+            <strong>{jobs.data ? jobs.data.pending : '—'}</strong>
+          </div>
+          <div className="stat">
+            <span className="mono">Sent</span>
+            <strong>{jobs.data ? jobs.data.sent : '—'}</strong>
+          </div>
+          <div className="stat">
+            <span className="mono">Dead letters</span>
+            <strong>{jobs.data ? jobs.data.dead : '—'}</strong>
+          </div>
+        </div>
+        {jobs.isPending && <p className="mono">Loading jobs…</p>}
+        {jobs.data && jobList.length === 0 && <p className="mono panel-empty">Queue is empty.</p>}
+        <div className="table-wrap">
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>Kind</th>
+                <th>Recipient</th>
+                <th>Attempts</th>
+                <th>State</th>
+                <th>Last error</th>
+              </tr>
+            </thead>
+            <tbody>
+              {jobList.map((job) => (
+                <tr key={job.id}>
+                  <td className="mono">{job.kind}</td>
+                  <td className="mono">{job.recipient}</td>
+                  <td className="mono">{job.attempts}</td>
+                  <td>
+                    <span className="mini-status mono">
+                      {job.deadLetteredAt ? 'dead' : job.sentAt ? 'sent' : 'pending'}
+                    </span>
+                  </td>
+                  <td className="mono admin-sub">{job.lastError ?? ''}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="panel">
+        <h2 className="section-label mono">Mail</h2>
+        <p className="mono panel-empty">
+          What the outbox worker delivered. No provider is wired, so this is exactly what would
+          have gone out.
+        </p>
+        {mail.isPending && <p className="mono">Loading mail…</p>}
+        {mail.data && mailList.length === 0 && (
+          <p className="mono panel-empty">Nothing delivered yet.</p>
+        )}
+        <div className="table-wrap">
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>Sent</th>
+                <th>To</th>
+                <th>Subject</th>
+              </tr>
+            </thead>
+            <tbody>
+              {mailList.map((message) => (
+                <tr key={message.id}>
+                  <td className="mono">{new Date(message.createdAt).toLocaleString()}</td>
+                  <td className="mono">{message.recipient}</td>
+                  <td>{message.subject}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
     </div>
   )

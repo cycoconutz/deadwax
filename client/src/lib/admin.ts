@@ -34,6 +34,69 @@ export function useAdminReviews(enabled: boolean) {
   })
 }
 
+export interface AdminWebhookEvent {
+  id: number
+  eventId: string
+  type: string
+  outcome: string | null
+  receivedAt: string
+  processedAt: string | null
+}
+
+export interface AdminJob {
+  id: number
+  kind: string
+  recipient: string
+  attempts: number
+  lastError: string | null
+  createdAt: string
+  sentAt: string | null
+  deadLetteredAt: string | null
+}
+
+export interface AdminJobs {
+  pending: number
+  dead: number
+  sent: number
+  oldestPendingAt: string | null
+  recent: AdminJob[]
+}
+
+export interface AdminMail {
+  id: number
+  recipient: string
+  subject: string
+  body: string
+  createdAt: string
+}
+
+export function useAdminWebhooks(enabled: boolean) {
+  return useQuery({
+    queryKey: ['admin', 'webhooks'],
+    enabled,
+    refetchInterval: 15_000,
+    queryFn: ({ signal }) => api<{ data: AdminWebhookEvent[] }>('/admin/webhooks', { signal }),
+  })
+}
+
+export function useAdminJobs(enabled: boolean) {
+  return useQuery({
+    queryKey: ['admin', 'jobs'],
+    enabled,
+    refetchInterval: 10_000,
+    queryFn: ({ signal }) => api<AdminJobs>('/admin/jobs', { signal }),
+  })
+}
+
+export function useAdminMail(enabled: boolean) {
+  return useQuery({
+    queryKey: ['admin', 'mail'],
+    enabled,
+    refetchInterval: 30_000,
+    queryFn: ({ signal }) => api<{ data: AdminMail[] }>('/admin/mail', { signal }),
+  })
+}
+
 export function useArchiveListing() {
   const queryClient = useQueryClient()
   return useMutation({
