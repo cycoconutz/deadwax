@@ -20,9 +20,16 @@ dead letters.
 Numbers measured on 2026-11-13 on a Windows machine with Postgres on the same host, against
 the production build. `npm run load` reports the distribution and refuses to guess.
 
-The hosted demo sleeps on a free tier. A cold request took **32.75 s**; a warm one takes
-**0.13 s**, which is why `.github/workflows/keepalive.yml` pings `/api/health` every ten
-minutes.
+The hosted demo sleeps on a free tier, and that is deliberate. A cold request took
+**32.75 s**; a warm one takes **0.13 s**. An earlier keepalive cron pinned the demo warm
+around the clock, which also pinned the Neon free-tier compute awake: the free plan
+allows 100 CU-hours per project per month, the budget ran out on day seventeen, and the
+database refused every query until the month rolled over. A reviewer now waits out one
+cold start; the database scales to zero between visits and the budget lasts. If the
+database is unreachable at boot, the server starts degraded, answers 503 with
+`"status": "degraded"` on `/api/health`, and retries its migrations in the
+background until the database returns, instead of crash-looping with nothing behind
+the port.
 
 ## Features
 
