@@ -26,6 +26,16 @@ describe('GET /api/health', () => {
     })
   })
 
+  it('lets other origins load this route and no other', async () => {
+    const health = await app.inject({ method: 'GET', url: '/api/health' })
+    const other = await app.inject({ method: 'GET', url: '/api/listings' })
+
+    expect(health.headers['cross-origin-resource-policy']).toBe('cross-origin')
+    expect(health.headers['x-content-type-options']).toBe('nosniff')
+    expect(health.headers['strict-transport-security']).toBeDefined()
+    expect(other.headers['cross-origin-resource-policy']).toBe('same-origin')
+  })
+
   it('reports degraded when the schema is not applied', async () => {
     markMigrationsPending()
     try {
